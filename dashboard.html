@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Attack Path Modeler</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body { background: #1a1a2e; margin: 0; font-family: Arial, sans-serif; color: white; }
+    h1 { text-align: center; padding: 20px 0 0; font-size: 22px; color: #e0e0e0; }
+    p  { text-align: center; color: #888; margin: 4px 0 10px; font-size: 13px; }
+    .node circle { stroke: #fff; stroke-width: 1.5px; cursor: pointer; }
+    .node text   { font-size: 11px; fill: white; pointer-events: none; }
+    #tooltip {
+      position: absolute;
+      background: #2a2a4a;
+      border: 1px solid #555;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 12px;
+      pointer-events: none;
+      display: none;
+      max-width: 240px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <h1>Attack Path Graph</h1>
+  <p>Hover over nodes and edges for details &nbsp;|&nbsp; Drag nodes to rearrange</p>
+  <div id="tooltip"></div>
+  <svg id="graph"></svg>
+
+<script>
+const width  = window.innerWidth;
+const height = window.innerHeight - 80;
+
+const svg = d3.select("#graph")
+  .attr("width", width)
+  .attr("height", height);
+
+svg.append("defs").append("marker")
+  .attr("id", "arrow")
+  .attr("viewBox", "0 -5 10 10")
+  .attr("refX", 10).attr("refY", 0)
+  .attr("markerWidth", 6).attr("markerHeight", 6)
+  .attr("orient", "auto")
+  .append("path")
+  .attr("d", "M0,-5L10,0L0,5")
+  .attr("fill", "#aaa");
+
+svg.append("defs").append("marker")
+  .attr("id", "arrow-red")
+  .attr("viewBox", "0 -5 10 10")
+  .attr("refX", 10).attr("refY", 0)
+  .attr("markerWidth", 6).attr("markerHeight", 6)
+  .attr("orient", "auto")
+  .append("path")
+  .attr("d", "M0,-5L10,0L0,5")
+  .attr("fill", "red");
+
+const color = d3.scaleSequential()
+  .domain([0, 10])
+  .interpolator(d3.interpolateRdYlGn)
+  .clamp(true);
+
+const cvssColor = v => color(10 - v);
+const tooltip = d3.select("#tooltip");
+
+d3.json("data/graph.json").then(data => {
+
+  const riskNodeIds = ["10.0.0.1", "10.0.0.5", "10.0.1.4"];
+  const riskLayer = svg.append("g").attr("id", "risk-path");
+
+  const simulation = d3.forceSimulation(data.nodes)
+    .force("link", d3.forceLink(data.links).id(d => d.id).distance(220))
+    .force("charge", d3.forceManyBody().strength(-1200))
+    .force("center", d3.forceCenter(width / 2, height / 2))
+    .force("x", d3.forceX(width / 2).strength(0.03))
+    .force("y", d3.forceY(height / 2).strength(0.03));
+
+  const link = svg.append("g").selectAll("line")
+    .data(data.links)
+    .join("line")
+    .attr("stroke", "#aaaaaa")
+    .attr("stroke-width", 1)
+    .attr("stroke-opacity", 0.4)
+    .attr("marker-end", "url(#arrow)")
+    .on("mouseover", (event, d) => {
+      const src = typeof d.source === "object" ? d.source.id : d.source;
+      const tgt = typeof d.target === "object" ? d.target.id : d.target;
+      tooltip.style("display", "block")
+        .html(`<b>${src} → ${tgt}</b><br>
+               CVE: ${d.cve}<br>
+               Service: ${d.service}:${d.port}<br>
+               Weight: ${d.weight}`);
+    })
+    .on("mousemove", event => {
+      tooltip.style("left", (event.pageX + 12) + "px")
+             .style("top",  (event.pageY - 28) + "px");
+    })
+    .on("mouseout", () => tooltip.style("display", "none"));
+
+  const node = svg.append("g").selectAll("g")
+    .data(data.nodes)
+    .join("g")
+    .attr("class", "node")
+    .call(d3.drag()
+      .on("start", (event, d) => {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x; d.fy = d.y;
+      })
+      .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+      .on("end", (event, d) => {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null; d.fy = null;
+      }))
+    .on("mouseover", (event, d) => {
+      const vulns = d.vulns
+        ? d.vulns.map(v =>
+            `<br>• ${v.cve} (CVSS ${v.cvss}) — ${v.service}:${v.port}`
+          ).join("")
+        : "";
+      tooltip.style("display", "block")
+        .html(`<b>${d.hostname}</b> (${d.id})<br>
+               Max CVSS: ${d.max_cvss}${vulns}`);
+    })
+    .on("mousemove", event => {
+      tooltip.style("left", (event.pageX + 12) + "px")
+             .style("top",  (event.pageY - 28) + "px");
+    })
+    .on("mouseout", () => tooltip.style("display", "none"));
+
+  node.append("circle")
+    .attr("r", d => 10 + d.max_cvss * 2)
+    .attr("fill", d => cvssColor(d.max_cvss));
+
+  node.append("text")
+    .attr("dy", 4)
+    .attr("text-anchor", "middle")
+    .text(d => d.hostname);
+
+  simulation.on("tick", () => {
+    link
+      .attr("x1", d => d.source.x)
+      .attr("y1", d => d.source.y)
+      .attr("x2", d => {
+        const dx = d.target.x - d.source.x;
+        const dy = d.target.y - d.source.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const r = 10 + d.target.max_cvss * 2;
+        return d.target.x - (dx / dist) * (r + 4);
+      })
+      .attr("y2", d => {
+        const dx = d.target.x - d.source.x;
+        const dy = d.target.y - d.source.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const r = 10 + d.target.max_cvss * 2;
+        return d.target.y - (dy / dist) * (r + 4);
+      });
+
+    node.attr("transform", d => `translate(${d.x},${d.y})`);
+
+    // Redraw red path on every tick
+    const nodeById = Object.fromEntries(data.nodes.map(n => [n.id, n]));
+    riskLayer.selectAll("line").remove();
+    riskNodeIds.slice(0, -1).forEach((id, i) => {
+      const s = nodeById[id];
+      const t = nodeById[riskNodeIds[i + 1]];
+      const dx = t.x - s.x;
+      const dy = t.y - s.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const r = 10 + t.max_cvss * 2;
+      riskLayer.append("line")
+        .attr("x1", s.x).attr("y1", s.y)
+        .attr("x2", t.x - (dx / dist) * (r + 4))
+        .attr("y2", t.y - (dy / dist) * (r + 4))
+        .attr("stroke", "red")
+        .attr("stroke-width", 3)
+        .attr("marker-start", "url(#arrow-red)");
+    });
+  });
+});
+</script>
+</body>
+</html>

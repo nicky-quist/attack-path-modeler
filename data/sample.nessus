@@ -1,0 +1,132 @@
+<?xml version="1.0" ?>
+<NessusClientData_v2>
+  <Report name="My Scan">
+
+    <ReportHost name="10.0.0.1">
+      <HostProperties>
+        <tag name="host-ip">10.0.0.1</tag>
+        <tag name="hostname">web-server</tag>
+      </HostProperties>
+      <ReportItem port="443" svc_name="https" protocol="tcp" pluginName="Apache Log4Shell">
+        <cvss_base_score>10.0</cvss_base_score>
+        <cve>CVE-2021-44228</cve>
+      </ReportItem>
+      <ReportItem port="22" svc_name="ssh" protocol="tcp" pluginName="OpenSSH Weak Config">
+        <cvss_base_score>5.3</cvss_base_score>
+        <cve>CVE-2023-38408</cve>
+      </ReportItem>
+    </ReportHost>
+
+    <ReportHost name="10.0.0.2">
+      <HostProperties>
+        <tag name="host-ip">10.0.0.2</tag>
+        <tag name="hostname">db-server</tag>
+      </HostProperties>
+      <ReportItem port="3306" svc_name="mysql" protocol="tcp" pluginName="MySQL Auth Bypass">
+        <cvss_base_score>9.8</cvss_base_score>
+        <cve>CVE-2012-2122</cve>
+      </ReportItem>
+    </ReportHost>
+
+    <ReportHost name="10.0.0.3">
+      <HostProperties>
+        <tag name="host-ip">10.0.0.3</tag>
+        <tag name="hostname">internal-api</tag>
+      </HostProperties>
+      <ReportItem port="8080" svc_name="http" protocol="tcp" pluginName="Tomcat RCE">
+        <cvss_base_score>8.1</cvss_base_score>
+        <cve>CVE-2020-1938</cve>
+      </ReportItem>
+    </ReportHost>
+
+    <ReportHost name="10.0.0.4">
+      <HostProperties>
+        <tag name="host-ip">10.0.0.4</tag>
+        <tag name="hostname">mail-server</tag>
+      </HostProperties>
+      <ReportItem port="25" svc_name="smtp" protocol="tcp" pluginName="Exim RCE">
+        <cvss_base_score>9.8</cvss_base_score>
+        <cve>CVE-2019-10149</cve>
+      </ReportItem>
+      <ReportItem port="143" svc_name="imap" protocol="tcp" pluginName="Dovecot Weakness">
+        <cvss_base_score>4.2</cvss_base_score>
+        <cve>CVE-2020-12100</cve>
+      </ReportItem>
+    </ReportHost>
+
+    <ReportHost name="10.0.0.5">
+      <HostProperties>
+        <tag name="host-ip">10.0.0.5</tag>
+        <tag name="hostname">vpn-gateway</tag>
+      </HostProperties>
+      <ReportItem port="1194" svc_name="openvpn" protocol="tcp" pluginName="OpenVPN Heap Overflow">
+        <cvss_base_score>7.5</cvss_base_score>
+        <cve>CVE-2017-7508</cve>
+      </ReportItem>
+    </ReportHost>
+
+    <ReportHost name="10.0.1.1">
+      <HostProperties>
+        <tag name="host-ip">10.0.1.1</tag>
+        <tag name="hostname">file-server</tag>
+      </HostProperties>
+      <ReportItem port="445" svc_name="smb" protocol="tcp" pluginName="EternalBlue">
+        <cvss_base_score>9.8</cvss_base_score>
+        <cve>CVE-2017-0144</cve>
+      </ReportItem>
+    </ReportHost>
+
+    <ReportHost name="10.0.1.2">
+      <HostProperties>
+        <tag name="host-ip">10.0.1.2</tag>
+        <tag name="hostname">dev-workstation</tag>
+      </HostProperties>
+      <ReportItem port="3389" svc_name="rdp" protocol="tcp" pluginName="BlueKeep">
+        <cvss_base_score>9.8</cvss_base_score>
+        <cve>CVE-2019-0708</cve>
+      </ReportItem>
+      <ReportItem port="22" svc_name="ssh" protocol="tcp" pluginName="Weak SSH Key">
+        <cvss_base_score>6.1</cvss_base_score>
+        <cve>CVE-2018-15473</cve>
+      </ReportItem>
+    </ReportHost>
+
+    <ReportHost name="10.0.1.3">
+      <HostProperties>
+        <tag name="host-ip">10.0.1.3</tag>
+        <tag name="hostname">backup-server</tag>
+      </HostProperties>
+      <ReportItem port="873" svc_name="rsync" protocol="tcp" pluginName="Rsync Unauth Access">
+        <cvss_base_score>7.5</cvss_base_score>
+        <cve>CVE-2014-9512</cve>
+      </ReportItem>
+    </ReportHost>
+
+    <ReportHost name="10.0.1.4">
+      <HostProperties>
+        <tag name="host-ip">10.0.1.4</tag>
+        <tag name="hostname">domain-controller</tag>
+      </HostProperties>
+      <ReportItem port="389" svc_name="ldap" protocol="tcp" pluginName="ZeroLogon">
+        <cvss_base_score>10.0</cvss_base_score>
+        <cve>CVE-2020-1472</cve>
+      </ReportItem>
+      <ReportItem port="445" svc_name="smb" protocol="tcp" pluginName="PrintNightmare">
+        <cvss_base_score>8.8</cvss_base_score>
+        <cve>CVE-2021-34527</cve>
+      </ReportItem>
+    </ReportHost>
+
+    <ReportHost name="10.0.1.5">
+      <HostProperties>
+        <tag name="host-ip">10.0.1.5</tag>
+        <tag name="hostname">monitoring-server</tag>
+      </HostProperties>
+      <ReportItem port="9200" svc_name="elasticsearch" protocol="tcp" pluginName="Elastic Unauth">
+        <cvss_base_score>7.5</cvss_base_score>
+        <cve>CVE-2015-1427</cve>
+      </ReportItem>
+    </ReportHost>
+
+  </Report>
+</NessusClientData_v2>

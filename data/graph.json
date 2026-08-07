@@ -1,0 +1,416 @@
+{
+  "nodes": [
+    {
+      "id": "10.0.0.1",
+      "hostname": "web-server",
+      "max_cvss": 10.0
+    },
+    {
+      "id": "10.0.0.2",
+      "hostname": "db-server",
+      "max_cvss": 9.8
+    },
+    {
+      "id": "10.0.0.3",
+      "hostname": "internal-api",
+      "max_cvss": 8.1
+    },
+    {
+      "id": "10.0.0.4",
+      "hostname": "mail-server",
+      "max_cvss": 9.8
+    },
+    {
+      "id": "10.0.0.5",
+      "hostname": "vpn-gateway",
+      "max_cvss": 7.5
+    },
+    {
+      "id": "10.0.1.1",
+      "hostname": "file-server",
+      "max_cvss": 9.8
+    },
+    {
+      "id": "10.0.1.2",
+      "hostname": "dev-workstation",
+      "max_cvss": 9.8
+    },
+    {
+      "id": "10.0.1.3",
+      "hostname": "backup-server",
+      "max_cvss": 7.5
+    },
+    {
+      "id": "10.0.1.4",
+      "hostname": "domain-controller",
+      "max_cvss": 10.0
+    },
+    {
+      "id": "10.0.1.5",
+      "hostname": "monitoring-server",
+      "max_cvss": 7.5
+    }
+  ],
+  "links": [
+    {
+      "source": "10.0.0.1",
+      "target": "10.0.0.2",
+      "weight": 0.102,
+      "cve": "CVE-2012-2122",
+      "service": "mysql",
+      "port": "3306"
+    },
+    {
+      "source": "10.0.0.1",
+      "target": "10.0.0.3",
+      "weight": 0.1235,
+      "cve": "CVE-2020-1938",
+      "service": "http",
+      "port": "8080"
+    },
+    {
+      "source": "10.0.0.1",
+      "target": "10.0.0.4",
+      "weight": 0.102,
+      "cve": "CVE-2019-10149",
+      "service": "smtp",
+      "port": "25"
+    },
+    {
+      "source": "10.0.0.1",
+      "target": "10.0.0.5",
+      "weight": 0.1333,
+      "cve": "CVE-2017-7508",
+      "service": "openvpn",
+      "port": "1194"
+    },
+    {
+      "source": "10.0.0.2",
+      "target": "10.0.0.1",
+      "weight": 0.1,
+      "cve": "CVE-2021-44228",
+      "service": "https",
+      "port": "443"
+    },
+    {
+      "source": "10.0.0.2",
+      "target": "10.0.0.3",
+      "weight": 0.1235,
+      "cve": "CVE-2020-1938",
+      "service": "http",
+      "port": "8080"
+    },
+    {
+      "source": "10.0.0.2",
+      "target": "10.0.0.4",
+      "weight": 0.102,
+      "cve": "CVE-2019-10149",
+      "service": "smtp",
+      "port": "25"
+    },
+    {
+      "source": "10.0.0.2",
+      "target": "10.0.0.5",
+      "weight": 0.1333,
+      "cve": "CVE-2017-7508",
+      "service": "openvpn",
+      "port": "1194"
+    },
+    {
+      "source": "10.0.0.3",
+      "target": "10.0.0.1",
+      "weight": 0.1,
+      "cve": "CVE-2021-44228",
+      "service": "https",
+      "port": "443"
+    },
+    {
+      "source": "10.0.0.3",
+      "target": "10.0.0.2",
+      "weight": 0.102,
+      "cve": "CVE-2012-2122",
+      "service": "mysql",
+      "port": "3306"
+    },
+    {
+      "source": "10.0.0.3",
+      "target": "10.0.0.4",
+      "weight": 0.102,
+      "cve": "CVE-2019-10149",
+      "service": "smtp",
+      "port": "25"
+    },
+    {
+      "source": "10.0.0.3",
+      "target": "10.0.0.5",
+      "weight": 0.1333,
+      "cve": "CVE-2017-7508",
+      "service": "openvpn",
+      "port": "1194"
+    },
+    {
+      "source": "10.0.0.4",
+      "target": "10.0.0.1",
+      "weight": 0.1,
+      "cve": "CVE-2021-44228",
+      "service": "https",
+      "port": "443"
+    },
+    {
+      "source": "10.0.0.4",
+      "target": "10.0.0.2",
+      "weight": 0.102,
+      "cve": "CVE-2012-2122",
+      "service": "mysql",
+      "port": "3306"
+    },
+    {
+      "source": "10.0.0.4",
+      "target": "10.0.0.3",
+      "weight": 0.1235,
+      "cve": "CVE-2020-1938",
+      "service": "http",
+      "port": "8080"
+    },
+    {
+      "source": "10.0.0.4",
+      "target": "10.0.0.5",
+      "weight": 0.1333,
+      "cve": "CVE-2017-7508",
+      "service": "openvpn",
+      "port": "1194"
+    },
+    {
+      "source": "10.0.0.5",
+      "target": "10.0.0.1",
+      "weight": 0.1,
+      "cve": "CVE-2021-44228",
+      "service": "https",
+      "port": "443"
+    },
+    {
+      "source": "10.0.0.5",
+      "target": "10.0.0.2",
+      "weight": 0.102,
+      "cve": "CVE-2012-2122",
+      "service": "mysql",
+      "port": "3306"
+    },
+    {
+      "source": "10.0.0.5",
+      "target": "10.0.0.3",
+      "weight": 0.1235,
+      "cve": "CVE-2020-1938",
+      "service": "http",
+      "port": "8080"
+    },
+    {
+      "source": "10.0.0.5",
+      "target": "10.0.0.4",
+      "weight": 0.102,
+      "cve": "CVE-2019-10149",
+      "service": "smtp",
+      "port": "25"
+    },
+    {
+      "source": "10.0.0.5",
+      "target": "10.0.1.1",
+      "weight": 0.102,
+      "cve": "CVE-2017-0144",
+      "service": "smb",
+      "port": "445"
+    },
+    {
+      "source": "10.0.0.5",
+      "target": "10.0.1.2",
+      "weight": 0.102,
+      "cve": "CVE-2019-0708",
+      "service": "rdp",
+      "port": "3389"
+    },
+    {
+      "source": "10.0.0.5",
+      "target": "10.0.1.3",
+      "weight": 0.1333,
+      "cve": "CVE-2014-9512",
+      "service": "rsync",
+      "port": "873"
+    },
+    {
+      "source": "10.0.0.5",
+      "target": "10.0.1.4",
+      "weight": 0.1,
+      "cve": "CVE-2020-1472",
+      "service": "ldap",
+      "port": "389"
+    },
+    {
+      "source": "10.0.0.5",
+      "target": "10.0.1.5",
+      "weight": 0.1333,
+      "cve": "CVE-2015-1427",
+      "service": "elasticsearch",
+      "port": "9200"
+    },
+    {
+      "source": "10.0.1.1",
+      "target": "10.0.1.2",
+      "weight": 0.102,
+      "cve": "CVE-2019-0708",
+      "service": "rdp",
+      "port": "3389"
+    },
+    {
+      "source": "10.0.1.1",
+      "target": "10.0.1.3",
+      "weight": 0.1333,
+      "cve": "CVE-2014-9512",
+      "service": "rsync",
+      "port": "873"
+    },
+    {
+      "source": "10.0.1.1",
+      "target": "10.0.1.4",
+      "weight": 0.1,
+      "cve": "CVE-2020-1472",
+      "service": "ldap",
+      "port": "389"
+    },
+    {
+      "source": "10.0.1.1",
+      "target": "10.0.1.5",
+      "weight": 0.1333,
+      "cve": "CVE-2015-1427",
+      "service": "elasticsearch",
+      "port": "9200"
+    },
+    {
+      "source": "10.0.1.2",
+      "target": "10.0.1.1",
+      "weight": 0.102,
+      "cve": "CVE-2017-0144",
+      "service": "smb",
+      "port": "445"
+    },
+    {
+      "source": "10.0.1.2",
+      "target": "10.0.1.3",
+      "weight": 0.1333,
+      "cve": "CVE-2014-9512",
+      "service": "rsync",
+      "port": "873"
+    },
+    {
+      "source": "10.0.1.2",
+      "target": "10.0.1.4",
+      "weight": 0.1,
+      "cve": "CVE-2020-1472",
+      "service": "ldap",
+      "port": "389"
+    },
+    {
+      "source": "10.0.1.2",
+      "target": "10.0.1.5",
+      "weight": 0.1333,
+      "cve": "CVE-2015-1427",
+      "service": "elasticsearch",
+      "port": "9200"
+    },
+    {
+      "source": "10.0.1.3",
+      "target": "10.0.1.1",
+      "weight": 0.102,
+      "cve": "CVE-2017-0144",
+      "service": "smb",
+      "port": "445"
+    },
+    {
+      "source": "10.0.1.3",
+      "target": "10.0.1.2",
+      "weight": 0.102,
+      "cve": "CVE-2019-0708",
+      "service": "rdp",
+      "port": "3389"
+    },
+    {
+      "source": "10.0.1.3",
+      "target": "10.0.1.4",
+      "weight": 0.1,
+      "cve": "CVE-2020-1472",
+      "service": "ldap",
+      "port": "389"
+    },
+    {
+      "source": "10.0.1.3",
+      "target": "10.0.1.5",
+      "weight": 0.1333,
+      "cve": "CVE-2015-1427",
+      "service": "elasticsearch",
+      "port": "9200"
+    },
+    {
+      "source": "10.0.1.4",
+      "target": "10.0.1.1",
+      "weight": 0.102,
+      "cve": "CVE-2017-0144",
+      "service": "smb",
+      "port": "445"
+    },
+    {
+      "source": "10.0.1.4",
+      "target": "10.0.1.2",
+      "weight": 0.102,
+      "cve": "CVE-2019-0708",
+      "service": "rdp",
+      "port": "3389"
+    },
+    {
+      "source": "10.0.1.4",
+      "target": "10.0.1.3",
+      "weight": 0.1333,
+      "cve": "CVE-2014-9512",
+      "service": "rsync",
+      "port": "873"
+    },
+    {
+      "source": "10.0.1.4",
+      "target": "10.0.1.5",
+      "weight": 0.1333,
+      "cve": "CVE-2015-1427",
+      "service": "elasticsearch",
+      "port": "9200"
+    },
+    {
+      "source": "10.0.1.5",
+      "target": "10.0.1.1",
+      "weight": 0.102,
+      "cve": "CVE-2017-0144",
+      "service": "smb",
+      "port": "445"
+    },
+    {
+      "source": "10.0.1.5",
+      "target": "10.0.1.2",
+      "weight": 0.102,
+      "cve": "CVE-2019-0708",
+      "service": "rdp",
+      "port": "3389"
+    },
+    {
+      "source": "10.0.1.5",
+      "target": "10.0.1.3",
+      "weight": 0.1333,
+      "cve": "CVE-2014-9512",
+      "service": "rsync",
+      "port": "873"
+    },
+    {
+      "source": "10.0.1.5",
+      "target": "10.0.1.4",
+      "weight": 0.1,
+      "cve": "CVE-2020-1472",
+      "service": "ldap",
+      "port": "389"
+    }
+  ]
+}
