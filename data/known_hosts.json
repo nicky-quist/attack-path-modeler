@@ -1,0 +1,27 @@
+{
+  "confluence-server": {
+    "ip": "192.168.20.10",
+    "cves": ["CVE-2023-22515"],
+    "port": "443",
+    "service": "https"
+  },
+  "pa-firewall": {
+    "ip": "192.168.20.1",
+    "role": "gateway",
+    "cves": ["CVE-2024-3400"],
+    "port": "443",
+    "service": "https"
+  },
+  "print-server": {
+    "ip": "192.168.21.15",
+    "cves": ["CVE-2021-34527"],
+    "port": "445",
+    "service": "smb"
+  },
+  "legacy-rdp-host": {
+    "ip": "192.168.21.20",
+    "cves": ["CVE-2019-0708"],
+    "port": "3389",
+    "service": "rdp"
+  }
+}

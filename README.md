@@ -7,8 +7,9 @@ A Python pipeline that ingests Nessus vulnerability scan data into a NetworkX gr
 ## Features
 
 - **Nessus Parser** — ingests `.nessus` XML scan files and extracts hosts, CVEs, CVSS scores, ports, and services
+- **Known-CVE Input** — no Nessus scan? Type in hosts + CVE IDs and the pipeline pulls real CVSS scores live from the [NVD API](https://nvd.nist.gov/developers) — see [`main_from_cves.py`](main_from_cves.py)
 - **Attack Graph** — builds a directed NetworkX graph where edges represent lateral movement paths between hosts, weighted by exploit ease (1/CVSS)
-- **Cross-Subnet Modeling** — bridges network segments through gateway nodes to model realistic multi-hop attack chains
+- **Cross-Subnet Modeling** — bridges network segments through any host marked as a gateway, for arbitrary topologies (not tied to one hardcoded subnet)
 - **Path Analysis** — ranks all attack paths by cumulative risk score and identifies choke points using betweenness centrality
 - **GNN Classifier** — PyTorch Geometric GCNConv model for edge-level high-risk lateral movement prediction
 - **Matplotlib Visualization** — static attack graph with color-coded risk levels and highlighted attack paths
@@ -22,13 +23,16 @@ attack-path-modeler/
 ├── data/
 │   ├── sample.nessus   # Sample Nessus scan data
 │   └── graph.json      # Exported graph for D3 dashboard
+│   ├── known_hosts.json # Example known-CVE host spec (no Nessus required)
 ├── src/
 │   ├── parser.py        # Nessus XML parser
-│   ├── graph.py          # NetworkX graph builder
-│   ├── analysis.py       # Attack path ranking and choke point detection
-│   ├── export.py         # JSON export for D3
-│   └── gnn.py             # PyTorch Geometric GNN classifier
-├── main.py               # Main pipeline runner
+│   ├── cve_lookup.py     # NVD API lookup — builds hosts from known CVE IDs
+│   ├── graph.py           # NetworkX graph builder
+│   ├── analysis.py        # Attack path ranking and choke point detection
+│   ├── export.py          # JSON export for D3
+│   └── gnn.py               # PyTorch Geometric GNN classifier
+├── main.py               # Pipeline runner — Nessus scan input
+├── main_from_cves.py     # Pipeline runner — known-CVE input (no Nessus needed)
 ├── dashboard.html        # Interactive D3.js visualization
 └── requirements.txt
 ```
@@ -42,7 +46,8 @@ pip install -r requirements.txt
 Requirements: `networkx`, `matplotlib`, `torch`, `torch-geometric`
 
 ## Usage
-Run the full pipeline:
+
+**From a Nessus scan:**
 ```bash
 python main.py
 ```
@@ -53,7 +58,14 @@ This will:
 4. Export `data/graph.json`
 5. Train the GNN classifier on synthetic data
 
-Launch the interactive dashboard:
+**From known CVEs, no Nessus scan required:**
+```bash
+python main_from_cves.py                    # uses data/known_hosts.json
+python main_from_cves.py path/to/hosts.json  # or your own host/CVE spec
+```
+Edit `data/known_hosts.json` with your own hosts — just an IP, a list of CVE IDs, and `"role": "gateway"` on whatever bridges your network segments (firewall, VPN concentrator, jump host). Real CVSS scores are pulled live from the [NVD API](https://nvd.nist.gov/developers) and cached to `data/.cve_cache.json`, so re-runs are instant. New (uncached) lookups are rate-limited to roughly one every 6 seconds to stay under NVD's unauthenticated request limit — looking up a handful of CVEs takes well under a minute.
+
+Either pipeline writes `data/graph.json`. Launch the dashboard to visualize whichever one ran last:
 ```bash
 python -m http.server 8080
 ```
@@ -62,7 +74,7 @@ Then open `http://localhost:8080/dashboard.html` in your browser.
 ## How it works
 
 ### 1. Graph construction
-Each host becomes a node with attributes: hostname, list of CVEs, and max CVSS score. Directed edges connect hosts on the same subnet, weighted by `1 / max_cvss` — lower weight means easier to exploit. A VPN gateway node bridges the two subnets to model cross-network lateral movement.
+Each host becomes a node with attributes: hostname, list of CVEs, and max CVSS score. Directed edges connect hosts on the same subnet, weighted by `1 / max_cvss` — lower weight means easier to exploit. Any host marked `"role": "gateway"` bridges to every host outside its own subnet, modeling cross-network lateral movement for however many segments your topology actually has (the sample dataset falls back to a fixed VPN-gateway bridge for backward compatibility, since it predates the `role` field).
 
 ### 2. Attack path ranking
 Uses Dijkstra's algorithm (`nx.shortest_path`) weighted by exploit ease to find the most dangerous attack chain. All simple paths are enumerated and ranked by cumulative risk score.

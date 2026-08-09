@@ -26,18 +26,40 @@ def build_graph(hosts):
                                 service=worst_vuln["service"],
                                 port=worst_vuln["port"])
 
-    # Bridge the two subnets through the vpn-gateway
-    vpn_ip = "10.0.0.5"
-    internal_hosts = [h for h in hosts if h["ip"].startswith("10.0.1.")]
-    for host in internal_hosts:
-        max_cvss_b = G.nodes[host["ip"]]["max_cvss"]
-        if max_cvss_b > 0:
-            worst_vuln = max(host["vulns"], key=lambda v: v["cvss"])
-            G.add_edge(vpn_ip, host["ip"],
-                       weight=round(1 / max_cvss_b, 4),
-                       cve=worst_vuln["cve"],
-                       service=worst_vuln["service"],
-                       port=worst_vuln["port"])
+    # Bridge subnets through any host explicitly marked as a gateway (role="gateway").
+    # Falls back to the original hardcoded 10.0.0.5 -> 10.0.1.x bridge when nothing
+    # declares a role, so the existing sample.nessus demo is unaffected.
+    gateways = [h for h in hosts if h.get("role") == "gateway"]
+
+    if gateways:
+        for gw in gateways:
+            gw_subnet = gw["ip"].rsplit(".", 1)[0]
+            for host in hosts:
+                if host["ip"] == gw["ip"]:
+                    continue
+                host_subnet = host["ip"].rsplit(".", 1)[0]
+                if host_subnet == gw_subnet:
+                    continue  # same-subnet edges are already handled above
+                max_cvss_b = G.nodes[host["ip"]]["max_cvss"]
+                if max_cvss_b > 0:
+                    worst_vuln = max(host["vulns"], key=lambda v: v["cvss"])
+                    G.add_edge(gw["ip"], host["ip"],
+                               weight=round(1 / max_cvss_b, 4),
+                               cve=worst_vuln["cve"],
+                               service=worst_vuln["service"],
+                               port=worst_vuln["port"])
+    else:
+        vpn_ip = "10.0.0.5"
+        internal_hosts = [h for h in hosts if h["ip"].startswith("10.0.1.")]
+        for host in internal_hosts:
+            max_cvss_b = G.nodes[host["ip"]]["max_cvss"]
+            if max_cvss_b > 0:
+                worst_vuln = max(host["vulns"], key=lambda v: v["cvss"])
+                G.add_edge(vpn_ip, host["ip"],
+                           weight=round(1 / max_cvss_b, 4),
+                           cve=worst_vuln["cve"],
+                           service=worst_vuln["service"],
+                           port=worst_vuln["port"])
 
     return G
 
