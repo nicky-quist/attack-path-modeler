@@ -92,6 +92,8 @@ web-server (CVE-2021-44228, CVSS 10.0)
 
 An attacker exploits Log4Shell on the public web server, pivots through the VPN gateway, and achieves domain compromise via ZeroLogon.
 
+![Attack path graph — highest risk path highlighted in red](attack_path_graph.png)
+
 ## Future work
 - Train GNN on real Nessus scan data from heterogeneous networks
 - Add MITRE ATT&CK technique mapping per CVE
