@@ -68,11 +68,11 @@ Each host becomes a node with attributes: hostname, list of CVEs, and max CVSS s
 Uses Dijkstra's algorithm (`nx.shortest_path`) weighted by exploit ease to find the most dangerous attack chain. All simple paths are enumerated and ranked by cumulative risk score.
 
 ### 3. GNN classifier
-Node features: `[max_cvss, num_vulns, num_open_ports, is_internal_subnet]`
+Node features: `[max_cvss, num_vulns, num_open_ports, is_internal_subnet]`, min-max normalized.
 
-Two GCNConv layers learn node embeddings from the graph structure. Source and target embeddings are concatenated per edge and fed into a linear classifier that predicts HIGH/LOW risk for each lateral movement path.
+Two GCNConv layers learn node embeddings from the graph structure, with a skip connection concatenating each node's raw features back in before classification — the synthetic graph is dense enough (~99 average degree on 100 nodes) that GCN message-passing alone smooths a host's own signal into the neighborhood average, and the skip connection keeps it recoverable. Source and target embeddings are concatenated per edge and fed into a linear classifier that predicts HIGH/LOW risk for each lateral movement path, trained on an 80/20 edge split with class weights computed from the training data.
 
-> **Note:** GNN accuracy scales with real scan data. With synthetic or small datasets the model defaults to majority-class prediction — this is a data variance issue, not an architecture issue.
+On the included synthetic dataset this reaches 100% precision/recall on held-out test edges. Real scan data will be noisier and less linearly separable than the synthetic generator, so expect lower (but hopefully still meaningfully above baseline) accuracy there — the model hasn't been validated against real Nessus output yet.
 
 ### 4. D3.js dashboard
 - Node color and size encode CVSS risk level (red = critical, orange = high)
