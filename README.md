@@ -74,6 +74,8 @@ Two GCNConv layers learn node embeddings from the graph structure, with a skip c
 
 On the included synthetic dataset this reaches 100% precision/recall on held-out test edges. Real scan data will be noisier and less linearly separable than the synthetic generator, so expect lower (but hopefully still meaningfully above baseline) accuracy there — the model hasn't been validated against real Nessus output yet.
 
+![GNN training converging to 100% precision/recall on train and held-out test edges](GNN_Training_Results.png)
+
 ### 4. D3.js dashboard
 - Node color and size encode CVSS risk level (red = critical, orange = high)
 - Hover any node to see its full CVE list
