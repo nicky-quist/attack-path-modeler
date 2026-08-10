@@ -2,8 +2,6 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv
-from src.parser import parse_nessus
-from src.graph import build_graph
 
 def build_pyg_data(hosts, G):
     node_list = list(G.nodes())

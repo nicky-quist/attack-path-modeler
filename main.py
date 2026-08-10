@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from src.parser import parse_nessus
 from src.graph import build_graph
-from src.analysis import find_attack_paths, find_choke_points
+from src.analysis import find_attack_paths
 
 hosts = parse_nessus("data/sample.nessus")
 G = build_graph(hosts)
