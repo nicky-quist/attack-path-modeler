@@ -99,6 +99,15 @@ const hostsEl = document.getElementById("hosts");
 const statusEl = document.getElementById("status");
 let rowCount = 0;
 
+// Escape untrusted strings before they ever go into innerHTML — hostnames typed into
+// this form get echoed back in the /api/generate response and rendered into the status
+// panel, so without this a hostname like "<img src=x onerror=...>" would execute.
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
 function addRow(prefill) {
   prefill = prefill || {};
   const id = rowCount++;
@@ -108,23 +117,23 @@ function addRow(prefill) {
   row.innerHTML = `
     <div>
       <label>Hostname</label>
-      <input type="text" class="f-hostname" placeholder="web-server" value="${prefill.hostname || ""}">
+      <input type="text" class="f-hostname" placeholder="web-server" value="${escapeHtml(prefill.hostname || "")}">
     </div>
     <div>
       <label>IP address</label>
-      <input type="text" class="f-ip" placeholder="10.0.0.10" value="${prefill.ip || ""}">
+      <input type="text" class="f-ip" placeholder="10.0.0.10" value="${escapeHtml(prefill.ip || "")}">
     </div>
     <div class="full">
       <label>CVE IDs (comma-separated)</label>
-      <input type="text" class="f-cves" placeholder="CVE-2021-44228, CVE-2021-45046" value="${prefill.cves || ""}">
+      <input type="text" class="f-cves" placeholder="CVE-2021-44228, CVE-2021-45046" value="${escapeHtml(prefill.cves || "")}">
     </div>
     <div>
       <label>Port (optional)</label>
-      <input type="text" class="f-port" placeholder="443" value="${prefill.port || ""}">
+      <input type="text" class="f-port" placeholder="443" value="${escapeHtml(prefill.port || "")}">
     </div>
     <div>
       <label>Service (optional)</label>
-      <input type="text" class="f-service" placeholder="https" value="${prefill.service || ""}">
+      <input type="text" class="f-service" placeholder="https" value="${escapeHtml(prefill.service || "")}">
     </div>
     <div class="row-footer">
       <label class="role-toggle">
@@ -203,12 +212,13 @@ document.getElementById("generate").addEventListener("click", async () => {
     const data = await res.json();
 
     if (!res.ok || !data.ok) {
-      setStatus("error", `Failed: ${data.error || res.statusText}`);
+      setStatus("error", `Failed: ${escapeHtml(data.error || res.statusText)}`);
       return;
     }
 
-    const choke = data.chokePoints.filter(c => c.score > 0).map(c => `${c.hostname} (${c.score})`).join(", ") || "none — fully connected graph";
-    const risk = data.riskPath.length ? data.riskPath.join(" &rarr; ") : "none found";
+    const choke = data.chokePoints.filter(c => c.score > 0)
+      .map(c => `${escapeHtml(c.hostname)} (${c.score})`).join(", ") || "none — fully connected graph";
+    const risk = data.riskPath.length ? data.riskPath.map(escapeHtml).join(" &rarr; ") : "none found";
     setStatus("success",
       `Graph built: ${data.nodeCount} host${data.nodeCount === 1 ? "" : "s"}, ` +
       `${data.edgeCount} edge${data.edgeCount === 1 ? "" : "s"}.<br>` +

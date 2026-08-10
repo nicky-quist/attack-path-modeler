@@ -67,6 +67,15 @@ const color = d3.scaleSequential()
 const cvssColor = v => color(10 - v);
 const tooltip = d3.select("#tooltip");
 
+// Escape untrusted strings before they go into tooltip .html() — hostnames, CVE IDs,
+// services and ports here all ultimately trace back to what someone typed into
+// builder.html or a known_hosts.json spec, so they can't be trusted as raw HTML.
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
 d3.json("data/graph.json").then(data => {
 
   // Highest-risk path is computed server-side (src/analysis.py) and shipped
@@ -99,10 +108,10 @@ d3.json("data/graph.json").then(data => {
       const src = typeof d.source === "object" ? d.source.id : d.source;
       const tgt = typeof d.target === "object" ? d.target.id : d.target;
       tooltip.style("display", "block")
-        .html(`<b>${src} → ${tgt}</b><br>
-               CVE: ${d.cve}<br>
-               Service: ${d.service}:${d.port}<br>
-               Weight: ${d.weight}`);
+        .html(`<b>${escapeHtml(src)} → ${escapeHtml(tgt)}</b><br>
+               CVE: ${escapeHtml(d.cve)}<br>
+               Service: ${escapeHtml(d.service)}:${escapeHtml(d.port)}<br>
+               Weight: ${escapeHtml(d.weight)}`);
     })
     .on("mousemove", event => {
       tooltip.style("left", (event.pageX + 12) + "px")
@@ -127,12 +136,12 @@ d3.json("data/graph.json").then(data => {
     .on("mouseover", (event, d) => {
       const vulns = d.vulns
         ? d.vulns.map(v =>
-            `<br>• ${v.cve} (CVSS ${v.cvss}) — ${v.service}:${v.port}`
+            `<br>• ${escapeHtml(v.cve)} (CVSS ${escapeHtml(v.cvss)}) — ${escapeHtml(v.service)}:${escapeHtml(v.port)}`
           ).join("")
         : "";
       tooltip.style("display", "block")
-        .html(`<b>${d.hostname}</b> (${d.id})<br>
-               Max CVSS: ${d.max_cvss}${vulns}`);
+        .html(`<b>${escapeHtml(d.hostname)}</b> (${escapeHtml(d.id)})<br>
+               Max CVSS: ${escapeHtml(d.max_cvss)}${vulns}`);
     })
     .on("mousemove", event => {
       tooltip.style("left", (event.pageX + 12) + "px")

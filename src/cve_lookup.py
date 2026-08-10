@@ -4,12 +4,17 @@ by just typing known CVEs instead of needing an actual Nessus scan.
 """
 import json
 import os
+import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 CACHE_PATH = os.path.join(os.path.dirname(__file__), "..", "data", ".cve_cache.json")
+CVE_ID_RE = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
+_OCTET = r"(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
+IPV4_RE = re.compile(rf"^{_OCTET}\.{_OCTET}\.{_OCTET}\.{_OCTET}$")
 
 
 def _load_cache():
@@ -35,12 +40,18 @@ def fetch_cvss(cve_id, cache=None, delay=6):
     `delay` is a sleep applied after any real network call (not cache hits)
     to stay under NVD's unauthenticated rate limit of ~5 requests/30s.
     """
+    if not CVE_ID_RE.match(cve_id):
+        raise ValueError(f"'{cve_id}' doesn't look like a CVE ID (expected e.g. CVE-2021-44228).")
+
     cache = _load_cache() if cache is None else cache
     if cve_id in cache:
         return cache[cve_id]
 
+    # Validated against CVE_ID_RE above (so this can only ever contain [A-Za-z0-9-]), but
+    # quote it anyway rather than interpolate raw user input into a request URL.
+    query = urllib.parse.urlencode({"cveId": cve_id})
     req = urllib.request.Request(
-        f"{NVD_URL}?cveId={cve_id}",
+        f"{NVD_URL}?{query}",
         headers={"User-Agent": "attack-path-modeler"},
     )
     try:
@@ -100,8 +111,11 @@ def build_hosts_from_known_cves(spec):
     cache = _load_cache()
     hosts = []
     for hostname, info in spec.items():
-        if not info.get("ip"):
+        ip = info.get("ip", "")
+        if not ip:
             raise ValueError(f"{hostname}: missing an IP address.")
+        if not IPV4_RE.match(ip):
+            raise ValueError(f"{hostname}: '{ip}' isn't a valid IPv4 address.")
         if not info.get("cves"):
             raise ValueError(f"{hostname}: needs at least one CVE ID.")
 

@@ -110,6 +110,15 @@ On the included synthetic dataset this reaches 100% precision/recall on held-out
 - Red arrows highlight the highest risk attack chain
 - Drag nodes to rearrange the layout
 
+## Security notes
+
+`main_from_cves.py` and `builder.html` run a local web server that accepts input and makes outbound requests, so it got a real pass rather than being left as an afterthought:
+
+- **Loopback-only binding.** The server binds `127.0.0.1`, not `0.0.0.0` — it's reachable only from the local machine, not anyone else on the same network.
+- **Input validation before any network or graph call.** CVE IDs are checked against `^CVE-\d{4}-\d{4,}$` and IPs against a real IPv4 pattern before either hits the NVD API or `build_graph` — this also closes a URL-parameter-injection path where an unvalidated CVE ID was concatenated straight into the NVD request's query string.
+- **Output encoding.** Both `dashboard.html`'s tooltips and `builder.html`'s status panel render hostnames/CVE data through an `escapeHtml()` helper before insertion — hostnames are user-typed and round-trip through the graph and the `/api/generate` response, so without this a hostname like `<img src=x onerror=...>` would execute in the browser. Confirmed fixed by actually submitting that payload through the form and dashboard, not just by inspecting the code.
+- **Defense-in-depth on `POST /api/generate`:** an `Origin` header check rejects cross-site requests (modern browsers already block this via CORS preflight for a JSON body, but the server doesn't rely on that alone), a body-size cap avoids buffering an oversized payload into memory, and a host-count cap bounds the cost of `find_highest_risk_path`'s path search — that function is roughly O(n²) simple-path searches, cheap for a handful of hosts but not something an unbounded input list should be allowed to drive.
+
 ## Sample attack chain
 Running against the included sample data produces this cross-subnet attack path:
 

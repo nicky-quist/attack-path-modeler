@@ -16,6 +16,9 @@ from src.graph import build_graph
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+MAX_BODY_BYTES = 100_000  # generous for a host/CVE list; blocks trivial memory-exhaustion attempts
+MAX_HOSTS = 50            # find_highest_risk_path is O(n^2) path searches — cap input, not just be fast
+
 
 class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
@@ -23,12 +26,29 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404)
             return
 
+        # Defense-in-depth against cross-site POSTs: browsers already block this via CORS
+        # preflight for a JSON content-type from another origin, but don't rely on that alone.
+        origin = self.headers.get("Origin")
+        if origin and origin not in (f"http://127.0.0.1:{self.server.server_address[1]}",
+                                      f"http://localhost:{self.server.server_address[1]}"):
+            self._send_json(403, {"ok": False, "error": "Cross-origin request rejected."})
+            return
+
         try:
             length = int(self.headers.get("Content-Length", 0))
+            if length > MAX_BODY_BYTES:
+                # Reject without reading the oversized body into memory — but since we're
+                # not draining it, the connection can't be reused for a next request.
+                self.close_connection = True
+                self._send_json(413, {"ok": False, "error": "Request body too large."})
+                return
+
             body = json.loads(self.rfile.read(length))
             spec = body.get("hosts", {})
             if not spec:
                 raise ValueError("No hosts provided.")
+            if len(spec) > MAX_HOSTS:
+                raise ValueError(f"Too many hosts ({len(spec)}) — max {MAX_HOSTS} per request.")
 
             hosts = build_hosts_from_known_cves(spec)
             G = build_graph(hosts)
@@ -75,7 +95,9 @@ def serve_dashboard(port=8080, open_browser=True, max_attempts=5, page="dashboar
     httpd = None
     for candidate in range(port, port + max_attempts):
         try:
-            httpd = socketserver.TCPServer(("", candidate), DashboardRequestHandler)
+            # Bind to loopback only — "" binds all interfaces, which would expose this
+            # (unauthenticated, file-writing) server to anyone else on the same network.
+            httpd = socketserver.TCPServer(("127.0.0.1", candidate), DashboardRequestHandler)
             port = candidate
             break
         except OSError:
