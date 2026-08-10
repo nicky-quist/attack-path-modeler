@@ -10,6 +10,10 @@
     p  { text-align: center; color: #888; margin: 4px 0 10px; font-size: 13px; }
     .node circle { stroke: #fff; stroke-width: 1.5px; cursor: pointer; }
     .node text   { font-size: 11px; fill: white; pointer-events: none; }
+    .node .node-label {
+      font-size: 12px;
+      text-shadow: 0 1px 3px #000, 0 0 5px #000;
+    }
     #tooltip {
       position: absolute;
       background: #2a2a4a;
@@ -166,32 +170,16 @@ d3.json("data/graph.json").then(data => {
     .attr("r", d => 10 + d.max_cvss * 2)
     .attr("fill", d => cvssColor(d.max_cvss));
 
+  // Label below the circle at one fixed, comfortable size for every node —
+  // cramming text inside the circle meant shrinking it to the point of being
+  // unreadable on small (low-CVSS) nodes. A light truncation cap still
+  // applies for extreme outliers so one long hostname can't visually run
+  // into neighboring nodes; the tooltip always shows the full name.
   node.append("text")
-    .attr("dy", 4)
+    .attr("class", "node-label")
     .attr("text-anchor", "middle")
-    .text(d => d.hostname)
-    .each(function (d) {
-      // Fit the hostname inside its circle: shrink the font first, then
-      // truncate with an ellipsis as a last resort for long names on small
-      // (low-CVSS) nodes. The full name is always still available on hover
-      // via the tooltip, so truncating the label loses nothing.
-      const r = 10 + d.max_cvss * 2;
-      const maxWidth = r * 1.8;
-      const el = d3.select(this);
-      let fontSize = 11;
-      el.style("font-size", fontSize + "px");
-      while (this.getComputedTextLength() > maxWidth && fontSize > 7) {
-        fontSize -= 1;
-        el.style("font-size", fontSize + "px");
-      }
-      if (this.getComputedTextLength() > maxWidth) {
-        let name = d.hostname;
-        while (name.length > 1 && this.getComputedTextLength() > maxWidth) {
-          name = name.slice(0, -1);
-          el.text(name + "…");
-        }
-      }
-    });
+    .attr("y", d => 10 + d.max_cvss * 2 + 16)
+    .text(d => d.hostname.length > 24 ? d.hostname.slice(0, 23) + "…" : d.hostname);
 
   simulation.on("tick", () => {
     link
