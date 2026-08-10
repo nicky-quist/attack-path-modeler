@@ -10,9 +10,23 @@ import webbrowser
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def serve_dashboard(port=8080, open_browser=True):
+def serve_dashboard(port=8080, open_browser=True, max_attempts=5):
     os.chdir(REPO_ROOT)
-    httpd = socketserver.TCPServer(("", port), http.server.SimpleHTTPRequestHandler)
+
+    httpd = None
+    for candidate in range(port, port + max_attempts):
+        try:
+            httpd = socketserver.TCPServer(("", candidate), http.server.SimpleHTTPRequestHandler)
+            port = candidate
+            break
+        except OSError:
+            continue  # port already in use — likely a server left running from an earlier session
+
+    if httpd is None:
+        print(f"\nCouldn't bind any port from {port} to {port + max_attempts - 1} — "
+              f"they're all in use. Close whatever's running on them, or run with --no-serve "
+              f"and start `python -m http.server <port>` yourself.")
+        return
 
     url = f"http://localhost:{port}/dashboard.html"
     print(f"\nServing dashboard at {url}  (Ctrl+C to stop)")
