@@ -169,7 +169,29 @@ d3.json("data/graph.json").then(data => {
   node.append("text")
     .attr("dy", 4)
     .attr("text-anchor", "middle")
-    .text(d => d.hostname);
+    .text(d => d.hostname)
+    .each(function (d) {
+      // Fit the hostname inside its circle: shrink the font first, then
+      // truncate with an ellipsis as a last resort for long names on small
+      // (low-CVSS) nodes. The full name is always still available on hover
+      // via the tooltip, so truncating the label loses nothing.
+      const r = 10 + d.max_cvss * 2;
+      const maxWidth = r * 1.8;
+      const el = d3.select(this);
+      let fontSize = 11;
+      el.style("font-size", fontSize + "px");
+      while (this.getComputedTextLength() > maxWidth && fontSize > 7) {
+        fontSize -= 1;
+        el.style("font-size", fontSize + "px");
+      }
+      if (this.getComputedTextLength() > maxWidth) {
+        let name = d.hostname;
+        while (name.length > 1 && this.getComputedTextLength() > maxWidth) {
+          name = name.slice(0, -1);
+          el.text(name + "…");
+        }
+      }
+    });
 
   simulation.on("tick", () => {
     link
