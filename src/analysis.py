@@ -27,6 +27,30 @@ def find_choke_points(G):
     return ranked
 
 
+def find_highest_risk_path(G, max_hops=4):
+    """Find the single most dangerous chain in the whole graph, with no
+    source/target known in advance — used when hosts come from typed CVEs
+    rather than a fixed demo dataset.
+
+    Ranks by hop count first (deepest lateral-movement chain), then by
+    lowest cumulative weight as a tiebreaker (easiest to actually traverse).
+    A short, low-weight path is a weaker story than a longer chain that
+    still represents a real, walkable route through the network.
+    """
+    best = None
+    for source in G.nodes:
+        for target in G.nodes:
+            if source == target:
+                continue
+            for path in nx.all_simple_paths(G, source, target, cutoff=max_hops):
+                weight = sum(G[a][b]["weight"] for a, b in zip(path, path[1:]))
+                hops = len(path) - 1
+                score = round(weight, 4)
+                if best is None or (hops, -score) > (best["hops"], -best["score"]):
+                    best = {"path": path, "hops": hops, "score": score}
+    return best
+
+
 if __name__ == "__main__":
     hosts = parse_nessus("data/sample.nessus")
     G = build_graph(hosts)

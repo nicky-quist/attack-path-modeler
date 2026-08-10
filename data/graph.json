@@ -412,5 +412,12 @@
       "service": "ldap",
       "port": "389"
     }
-  ]
+  ],
+  "riskPath": [
+    "10.0.0.1",
+    "10.0.0.5",
+    "10.0.1.4"
+  ],
+  "sourceLabel": "data/sample.nessus (fixed demo dataset)",
+  "generatedAt": "2026-08-10T00:55:13+00:00"
 }

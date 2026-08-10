@@ -1,3 +1,10 @@
+import os
+import sys
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))  # so this runs correctly regardless of cwd
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows defaults to cp1252, which can't print em dashes/arrows
+
 import matplotlib.pyplot as plt
 import networkx as nx
 from src.parser import parse_nessus
@@ -71,7 +78,7 @@ plt.tight_layout()
 plt.show()
 
 from src.export import export_graph
-export_graph(G, "data/graph.json")
+export_graph(G, "data/graph.json", risk_path=worst_path, source_label="data/sample.nessus (fixed demo dataset)")
 from src.gnn import build_pyg_data, train_gnn, generate_synthetic_data
 print("\n--- GNN Training (synthetic data) ---")
 synthetic_hosts = generate_synthetic_data(100)

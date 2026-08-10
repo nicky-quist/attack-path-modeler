@@ -1,0 +1,21 @@
+{
+  "ivanti-vpn": {
+    "ip": "172.16.0.1",
+    "role": "gateway",
+    "cves": ["CVE-2023-46805", "CVE-2024-21887"],
+    "port": "443",
+    "service": "https"
+  },
+  "domain-controller": {
+    "ip": "172.16.1.5",
+    "cves": ["CVE-2021-42278", "CVE-2021-42287"],
+    "port": "445",
+    "service": "smb"
+  },
+  "file-server": {
+    "ip": "172.16.1.10",
+    "cves": ["CVE-2021-42278"],
+    "port": "445",
+    "service": "smb"
+  }
+}

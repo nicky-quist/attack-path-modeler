@@ -21,16 +21,18 @@ A Python pipeline that ingests Nessus vulnerability scan data into a NetworkX gr
 ```
 attack-path-modeler/
 ├── data/
-│   ├── sample.nessus   # Sample Nessus scan data
-│   └── graph.json      # Exported graph for D3 dashboard
-│   ├── known_hosts.json # Example known-CVE host spec (no Nessus required)
+│   ├── sample.nessus            # Sample Nessus scan data
+│   ├── graph.json                # Exported graph for D3 dashboard (whichever pipeline ran last)
+│   ├── known_hosts.json          # Example known-CVE spec — DMZ breach scenario
+│   └── known_hosts_ivanti_vpn.json  # Example known-CVE spec — chained Ivanti VPN exploit
 ├── src/
 │   ├── parser.py        # Nessus XML parser
 │   ├── cve_lookup.py     # NVD API lookup — builds hosts from known CVE IDs
 │   ├── graph.py           # NetworkX graph builder
 │   ├── analysis.py        # Attack path ranking and choke point detection
 │   ├── export.py          # JSON export for D3
-│   └── gnn.py               # PyTorch Geometric GNN classifier
+│   ├── serve.py            # Local server + auto-opens the dashboard
+│   └── gnn.py                # PyTorch Geometric GNN classifier
 ├── main.py               # Pipeline runner — Nessus scan input
 ├── main_from_cves.py     # Pipeline runner — known-CVE input (no Nessus needed)
 ├── dashboard.html        # Interactive D3.js visualization
@@ -62,14 +64,21 @@ This will:
 ```bash
 python main_from_cves.py                    # uses data/known_hosts.json
 python main_from_cves.py path/to/hosts.json  # or your own host/CVE spec
+python main_from_cves.py --no-serve          # just export, skip auto-opening the dashboard
 ```
 Edit `data/known_hosts.json` with your own hosts — just an IP, a list of CVE IDs, and `"role": "gateway"` on whatever bridges your network segments (firewall, VPN concentrator, jump host). Real CVSS scores are pulled live from the [NVD API](https://nvd.nist.gov/developers) and cached to `data/.cve_cache.json`, so re-runs are instant. New (uncached) lookups are rate-limited to roughly one every 6 seconds to stay under NVD's unauthenticated request limit — looking up a handful of CVEs takes well under a minute.
 
-Either pipeline writes `data/graph.json`. Launch the dashboard to visualize whichever one ran last:
+Two ready-to-run example scenarios are included:
+- `data/known_hosts.json` — a DMZ breach: two public entry points (MOVEit SQLi, Jenkins CLI file read) pivoting through a Citrix Bleed session hijack on the reverse proxy to an internal Spring4Shell-vulnerable app
+- `data/known_hosts_ivanti_vpn.json` — the real chained Ivanti Connect Secure exploit (auth bypass + command injection, exploited together in the wild in Jan 2024) into an AD takeover via noPac
+
+By default, `main_from_cves.py` starts a local server and opens the dashboard in your browser automatically. `main.py` still requires the manual two-step (it's the older entry point and doesn't auto-serve):
 ```bash
 python -m http.server 8080
 ```
-Then open `http://localhost:8080/dashboard.html` in your browser.
+Then open `http://localhost:8080/dashboard.html`.
+
+Either pipeline writes `data/graph.json` — whichever ran most recently is what the dashboard shows. It displays a "Source:" line under the title so you always know which dataset is currently loaded, and highlights the actual highest-risk path for whatever graph is loaded (computed server-side — not tied to the original demo's specific IPs).
 
 ## How it works
 

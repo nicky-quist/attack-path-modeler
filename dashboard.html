@@ -26,7 +26,7 @@
 </head>
 <body>
   <h1>Attack Path Graph</h1>
-  <p>Hover over nodes and edges for details &nbsp;|&nbsp; Drag nodes to rearrange</p>
+  <p id="source-label">Hover over nodes and edges for details &nbsp;|&nbsp; Drag nodes to rearrange</p>
   <div id="tooltip"></div>
   <svg id="graph"></svg>
 
@@ -68,8 +68,17 @@ const tooltip = d3.select("#tooltip");
 
 d3.json("data/graph.json").then(data => {
 
-  const riskNodeIds = ["10.0.0.1", "10.0.0.5", "10.0.1.4"];
+  // Highest-risk path is computed server-side (src/analysis.py) and shipped
+  // in the export — not hardcoded, so this works for any topology, not just
+  // the original demo dataset.
+  const riskNodeIds = data.riskPath || [];
   const riskLayer = svg.append("g").attr("id", "risk-path");
+
+  if (data.sourceLabel) {
+    const when = data.generatedAt ? new Date(data.generatedAt).toLocaleString() : "";
+    d3.select("#source-label")
+      .text(`Source: ${data.sourceLabel}${when ? "  ·  generated " + when : ""}`);
+  }
 
   const simulation = d3.forceSimulation(data.nodes)
     .force("link", d3.forceLink(data.links).id(d => d.id).distance(220))
@@ -166,6 +175,7 @@ d3.json("data/graph.json").then(data => {
     riskNodeIds.slice(0, -1).forEach((id, i) => {
       const s = nodeById[id];
       const t = nodeById[riskNodeIds[i + 1]];
+      if (!s || !t) return;  // guard against a stale/hand-edited riskPath referencing a missing node
       const dx = t.x - s.x;
       const dy = t.y - s.y;
       const dist = Math.sqrt(dx * dx + dy * dy);

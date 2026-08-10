@@ -14,14 +14,14 @@ CACHE_PATH = os.path.join(os.path.dirname(__file__), "..", "data", ".cve_cache.j
 
 def _load_cache():
     if os.path.exists(CACHE_PATH):
-        with open(CACHE_PATH) as f:
+        with open(CACHE_PATH, encoding="utf-8") as f:
             return json.load(f)
     return {}
 
 
 def _save_cache(cache):
     os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
-    with open(CACHE_PATH, "w") as f:
+    with open(CACHE_PATH, "w", encoding="utf-8") as f:
         json.dump(cache, f, indent=2)
 
 
