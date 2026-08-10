@@ -43,7 +43,7 @@ svg.append("defs").append("marker")
   .attr("id", "arrow")
   .attr("viewBox", "0 -5 10 10")
   .attr("refX", 10).attr("refY", 0)
-  .attr("markerWidth", 6).attr("markerHeight", 6)
+  .attr("markerWidth", 3.5).attr("markerHeight", 3.5)
   .attr("orient", "auto")
   .append("path")
   .attr("d", "M0,-5L10,0L0,5")
@@ -53,7 +53,7 @@ svg.append("defs").append("marker")
   .attr("id", "arrow-red")
   .attr("viewBox", "0 -5 10 10")
   .attr("refX", 10).attr("refY", 0)
-  .attr("markerWidth", 6).attr("markerHeight", 6)
+  .attr("markerWidth", 3.5).attr("markerHeight", 3.5)
   .attr("orient", "auto")
   .append("path")
   .attr("d", "M0,-5L10,0L0,5")
@@ -84,6 +84,19 @@ d3.json("data/graph.json").then(data => {
   const riskNodeIds = data.riskPath || [];
   const riskLayer = svg.append("g").attr("id", "risk-path");
 
+  // Pairs of nodes the red risk-path line already covers — skip the plain gray
+  // line for these (in *either* direction) so a connection doesn't render
+  // twice. A bidirectional pair (e.g. two hosts both marked as gateways) has
+  // separate forward/reverse edges in the data, so this needs to be treated
+  // as undirected or the reverse-direction gray line would still show up
+  // right alongside the red one.
+  const riskEdgeKeys = new Set();
+  for (let i = 0; i < riskNodeIds.length - 1; i++) {
+    riskEdgeKeys.add(`${riskNodeIds[i]}->${riskNodeIds[i + 1]}`);
+    riskEdgeKeys.add(`${riskNodeIds[i + 1]}->${riskNodeIds[i]}`);
+  }
+  const idOf = v => (v && typeof v === "object") ? v.id : v;
+
   if (data.sourceLabel) {
     const when = data.generatedAt ? new Date(data.generatedAt).toLocaleString() : "";
     d3.select("#source-label")
@@ -98,7 +111,7 @@ d3.json("data/graph.json").then(data => {
     .force("y", d3.forceY(height / 2).strength(0.03));
 
   const link = svg.append("g").selectAll("line")
-    .data(data.links)
+    .data(data.links.filter(d => !riskEdgeKeys.has(`${idOf(d.source)}->${idOf(d.target)}`)))
     .join("line")
     .attr("stroke", "#aaaaaa")
     .attr("stroke-width", 1)
