@@ -100,8 +100,13 @@ def build_hosts_from_known_cves(spec):
     cache = _load_cache()
     hosts = []
     for hostname, info in spec.items():
+        if not info.get("ip"):
+            raise ValueError(f"{hostname}: missing an IP address.")
+        if not info.get("cves"):
+            raise ValueError(f"{hostname}: needs at least one CVE ID.")
+
         vulns = []
-        for cve_id in info.get("cves", []):
+        for cve_id in info["cves"]:
             result = fetch_cvss(cve_id, cache=cache)
             vulns.append({
                 "cve": cve_id,

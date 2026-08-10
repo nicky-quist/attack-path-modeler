@@ -7,7 +7,7 @@ A Python pipeline that ingests Nessus vulnerability scan data into a NetworkX gr
 ## Features
 
 - **Nessus Parser** — ingests `.nessus` XML scan files and extracts hosts, CVEs, CVSS scores, ports, and services
-- **Known-CVE Input** — no Nessus scan? Type in hosts + CVE IDs and the pipeline pulls real CVSS scores live from the [NVD API](https://nvd.nist.gov/developers) — see [`main_from_cves.py`](main_from_cves.py)
+- **Known-CVE Input** — no Nessus scan? Type in hosts + CVE IDs and the pipeline pulls real CVSS scores live from the [NVD API](https://nvd.nist.gov/developers), either from the terminal ([`main_from_cves.py`](main_from_cves.py)) or directly in the browser ([`builder.html`](builder.html))
 - **Attack Graph** — builds a directed NetworkX graph where edges represent lateral movement paths between hosts, weighted by exploit ease (1/CVSS)
 - **Cross-Subnet Modeling** — bridges network segments through any host marked as a gateway, for arbitrary topologies (not tied to one hardcoded subnet)
 - **Path Analysis** — ranks all attack paths by cumulative risk score and identifies choke points using betweenness centrality
@@ -36,6 +36,7 @@ attack-path-modeler/
 ├── main.py               # Pipeline runner — Nessus scan input
 ├── main_from_cves.py     # Pipeline runner — known-CVE input (no Nessus needed)
 ├── dashboard.html        # Interactive D3.js visualization
+├── builder.html          # Type hosts/CVEs in the browser, regenerates the graph live
 └── requirements.txt
 ```
 
@@ -71,6 +72,10 @@ Edit `data/known_hosts.json` with your own hosts — just an IP, a list of CVE I
 Two ready-to-run example scenarios are included:
 - `data/known_hosts.json` — a DMZ breach: two public entry points (MOVEit SQLi, Jenkins CLI file read) pivoting through a Citrix Bleed session hijack on the reverse proxy to an internal Spring4Shell-vulnerable app
 - `data/known_hosts_ivanti_vpn.json` — the real chained Ivanti Connect Secure exploit (auth bypass + command injection, exploited together in the wild in Jan 2024) into an AD takeover via noPac
+
+**Or skip files entirely — type CVEs into the dashboard itself:**
+
+Run either pipeline once to get the server running, then open `builder.html` (there's a link at the top of the dashboard). Add hosts, paste in CVE IDs, mark a gateway if you have one, and hit **Generate Attack Graph** — it looks up real CVSS scores from NVD, rebuilds the graph, and links straight to the updated dashboard. No JSON editing, no restarting the script.
 
 By default, `main_from_cves.py` starts a local server and opens the dashboard in your browser automatically. `main.py` still requires the manual two-step (it's the older entry point and doesn't auto-serve):
 ```bash

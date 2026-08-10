@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Attack Path Modeler — Build From CVEs</title>
+  <style>
+    body { background: #1a1a2e; margin: 0; font-family: Arial, sans-serif; color: white; }
+    .wrap { max-width: 780px; margin: 0 auto; padding: 24px 20px 60px; }
+    h1 { text-align: center; font-size: 22px; color: #e0e0e0; margin: 16px 0 4px; }
+    p.sub { text-align: center; color: #888; font-size: 13px; margin: 0 0 24px; }
+    a { color: #7ec4ff; }
+    .nav { text-align: center; margin-bottom: 16px; font-size: 13px; }
+
+    .host-row {
+      background: #22223f;
+      border: 1px solid #3a3a5a;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .host-row .full { grid-column: 1 / -1; }
+    .host-row label {
+      display: block;
+      font-size: 11px;
+      color: #999;
+      margin-bottom: 3px;
+      letter-spacing: 0.3px;
+    }
+    .host-row input[type=text] {
+      width: 100%;
+      box-sizing: border-box;
+      background: #1a1a2e;
+      border: 1px solid #444466;
+      border-radius: 4px;
+      color: white;
+      padding: 7px 8px;
+      font-size: 13px;
+    }
+    .host-row input[type=text]:focus { outline: none; border-color: #7ec4ff; }
+    .row-footer { display: flex; align-items: center; justify-content: space-between; grid-column: 1 / -1; margin-top: 2px; }
+    .role-toggle { font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 6px; }
+    .remove-btn {
+      background: none; border: 1px solid #663333; color: #ff8888;
+      border-radius: 4px; padding: 4px 10px; font-size: 11px; cursor: pointer;
+    }
+    .remove-btn:hover { background: #331a1a; }
+
+    .actions { display: flex; gap: 10px; margin-top: 18px; }
+    button.primary, button.secondary {
+      flex: 1;
+      padding: 11px;
+      border-radius: 6px;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button.primary { background: #d73027; color: white; }
+    button.primary:hover { background: #c02a20; }
+    button.primary:disabled { background: #555; cursor: not-allowed; }
+    button.secondary { background: #2a2a4a; color: #ddd; border: 1px solid #444466; }
+    button.secondary:hover { background: #333358; }
+
+    #status {
+      margin-top: 18px;
+      padding: 12px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1.6;
+      display: none;
+    }
+    #status.info    { display: block; background: #1e2a3a; border: 1px solid #33557a; color: #bcd9f5; }
+    #status.error   { display: block; background: #3a1e1e; border: 1px solid #7a3333; color: #f5bcbc; }
+    #status.success { display: block; background: #1e3a24; border: 1px solid #337a44; color: #bcf5c8; }
+    #status a.view-link { color: #9fe6b0; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Build Attack Graph From Known CVEs</h1>
+    <p class="sub">No Nessus scan needed — type in hosts and real CVE IDs, CVSS scores are pulled live from NVD.</p>
+    <div class="nav"><a href="dashboard.html">&larr; Back to dashboard</a></div>
+
+    <div id="hosts"></div>
+
+    <div class="actions">
+      <button type="button" class="secondary" id="add-host">+ Add Host</button>
+      <button type="button" class="primary" id="generate">Generate Attack Graph</button>
+    </div>
+
+    <div id="status"></div>
+  </div>
+
+<script>
+const hostsEl = document.getElementById("hosts");
+const statusEl = document.getElementById("status");
+let rowCount = 0;
+
+function addRow(prefill) {
+  prefill = prefill || {};
+  const id = rowCount++;
+  const row = document.createElement("div");
+  row.className = "host-row";
+  row.dataset.id = id;
+  row.innerHTML = `
+    <div>
+      <label>Hostname</label>
+      <input type="text" class="f-hostname" placeholder="web-server" value="${prefill.hostname || ""}">
+    </div>
+    <div>
+      <label>IP address</label>
+      <input type="text" class="f-ip" placeholder="10.0.0.10" value="${prefill.ip || ""}">
+    </div>
+    <div class="full">
+      <label>CVE IDs (comma-separated)</label>
+      <input type="text" class="f-cves" placeholder="CVE-2021-44228, CVE-2021-45046" value="${prefill.cves || ""}">
+    </div>
+    <div>
+      <label>Port (optional)</label>
+      <input type="text" class="f-port" placeholder="443" value="${prefill.port || ""}">
+    </div>
+    <div>
+      <label>Service (optional)</label>
+      <input type="text" class="f-service" placeholder="https" value="${prefill.service || ""}">
+    </div>
+    <div class="row-footer">
+      <label class="role-toggle">
+        <input type="checkbox" class="f-gateway" ${prefill.gateway ? "checked" : ""}>
+        Gateway (bridges network segments)
+      </label>
+      <button type="button" class="remove-btn">Remove</button>
+    </div>
+  `;
+  row.querySelector(".remove-btn").addEventListener("click", () => row.remove());
+  hostsEl.appendChild(row);
+}
+
+document.getElementById("add-host").addEventListener("click", () => addRow());
+
+// Start with two blank rows so the form isn't empty
+addRow();
+addRow();
+
+function setStatus(kind, html) {
+  statusEl.className = kind;
+  statusEl.innerHTML = html;
+}
+
+document.getElementById("generate").addEventListener("click", async () => {
+  const rows = [...hostsEl.querySelectorAll(".host-row")];
+  const hosts = {};
+  let error = null;
+
+  for (const row of rows) {
+    const hostname = row.querySelector(".f-hostname").value.trim();
+    const ip = row.querySelector(".f-ip").value.trim();
+    const cvesRaw = row.querySelector(".f-cves").value.trim();
+    if (!hostname && !ip && !cvesRaw) continue; // skip fully blank rows
+
+    if (!hostname || !ip) {
+      error = "Every host needs a hostname and an IP address.";
+      break;
+    }
+    const cves = cvesRaw.split(",").map(s => s.trim()).filter(Boolean);
+    if (cves.length === 0) {
+      error = `${hostname}: at least one CVE ID is required.`;
+      break;
+    }
+
+    hosts[hostname] = {
+      ip,
+      cves,
+      port: row.querySelector(".f-port").value.trim(),
+      service: row.querySelector(".f-service").value.trim(),
+    };
+    if (row.querySelector(".f-gateway").checked) {
+      hosts[hostname].role = "gateway";
+    }
+  }
+
+  if (error) {
+    setStatus("error", error);
+    return;
+  }
+  if (Object.keys(hosts).length === 0) {
+    setStatus("error", "Add at least one host first.");
+    return;
+  }
+
+  const btn = document.getElementById("generate");
+  btn.disabled = true;
+  setStatus("info", "Looking up CVEs from NVD&hellip; new (uncached) CVEs are rate-limited to ~1 every 6 seconds, so this can take a bit for several hosts.");
+
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hosts }),
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.ok) {
+      setStatus("error", `Failed: ${data.error || res.statusText}`);
+      return;
+    }
+
+    const choke = data.chokePoints.filter(c => c.score > 0).map(c => `${c.hostname} (${c.score})`).join(", ") || "none — fully connected graph";
+    const risk = data.riskPath.length ? data.riskPath.join(" &rarr; ") : "none found";
+    setStatus("success",
+      `Graph built: ${data.nodeCount} host${data.nodeCount === 1 ? "" : "s"}, ` +
+      `${data.edgeCount} edge${data.edgeCount === 1 ? "" : "s"}.<br>` +
+      `Choke points: ${choke}<br>` +
+      `Highest risk path: ${risk}<br><br>` +
+      `<a class="view-link" href="dashboard.html">View it on the dashboard &rarr;</a>`
+    );
+  } catch (e) {
+    setStatus("error", `Request failed: ${e.message}. Is the server still running?`);
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
