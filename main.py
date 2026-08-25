@@ -6,6 +6,7 @@ Pipeline runner — Nessus scan input.
     python main.py --no-plot       # skip the matplotlib window
     python main.py --skip-gnn      # skip model training
     python main.py --serve         # open the interactive D3 dashboard in a browser
+    python main.py --save-plot     # also write the graph to attack_path_graph.png
 """
 import os
 import sys
@@ -27,6 +28,7 @@ OFFLINE = "--offline" in sys.argv
 NO_PLOT = "--no-plot" in sys.argv
 SKIP_GNN = "--skip-gnn" in sys.argv
 SERVE = "--serve" in sys.argv
+SAVE_PLOT = "--save-plot" in sys.argv
 
 
 def main():
@@ -74,8 +76,8 @@ def main():
         choke_points=[{"id": c[0], "share": round(c[1], 4)} for c in chokes],
     )
 
-    if not NO_PLOT:
-        plot(G, best)
+    if not NO_PLOT or SAVE_PLOT:
+        plot(G, best, save=SAVE_PLOT, show=not NO_PLOT)
 
     if not SKIP_GNN:
         run_gnn()
@@ -87,7 +89,10 @@ def main():
         serve_dashboard()
 
 
-def plot(G, best):
+def plot(G, best, save=False, show=True, path="attack_path_graph.png"):
+    import matplotlib
+    if not show:
+        matplotlib.use("Agg")  # render to file without needing a window
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(16, 10))
@@ -127,7 +132,12 @@ def plot(G, best):
     ax.set_title(title, color="white", fontsize=13, pad=20)
     ax.axis("off")
     plt.tight_layout()
-    plt.show()
+    if save:
+        fig.savefig(path, dpi=140, facecolor=fig.get_facecolor())
+        print(f"Plot saved to {path}")
+    if show:
+        plt.show()
+    plt.close(fig)
 
 
 def run_gnn():
