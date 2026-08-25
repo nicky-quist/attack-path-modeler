@@ -5,6 +5,7 @@ Pipeline runner — Nessus scan input.
     python main.py --offline       # no network; CVSS-derived estimates
     python main.py --no-plot       # skip the matplotlib window
     python main.py --skip-gnn      # skip model training
+    python main.py --serve         # open the interactive D3 dashboard in a browser
 """
 import os
 import sys
@@ -25,6 +26,7 @@ from src.segmentation import resolve_policy
 OFFLINE = "--offline" in sys.argv
 NO_PLOT = "--no-plot" in sys.argv
 SKIP_GNN = "--skip-gnn" in sys.argv
+SERVE = "--serve" in sys.argv
 
 
 def main():
@@ -77,6 +79,12 @@ def main():
 
     if not SKIP_GNN:
         run_gnn()
+
+    if SERVE:
+        # dashboard.html fetches data/graph.json, which browsers block over
+        # file:// — it needs to be served over http to render at all.
+        from src.serve import serve_dashboard
+        serve_dashboard()
 
 
 def plot(G, best):
