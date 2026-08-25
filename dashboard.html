@@ -68,7 +68,9 @@ const color = d3.scaleSequential()
   .interpolator(d3.interpolateRdYlGn)
   .clamp(true);
 
-const cvssColor = v => color(10 - v);
+// Colour by probability of exploitation, not severity: the whole point of the
+// EPSS/KEV work is that these rank hosts differently.
+const riskColor = p => color(10 - (p || 0) * 10);
 const tooltip = d3.select("#tooltip");
 
 // Escape untrusted strings before they go into tooltip .html() — hostnames, CVE IDs,
@@ -153,12 +155,18 @@ d3.json("data/graph.json").then(data => {
     .on("mouseover", (event, d) => {
       const vulns = d.vulns
         ? d.vulns.map(v =>
-            `<br>• ${escapeHtml(v.cve)} (CVSS ${escapeHtml(v.cvss)}) — ${escapeHtml(v.service)}:${escapeHtml(v.port)}`
+            `<br>• ${escapeHtml(v.cve)} — CVSS ${escapeHtml(v.cvss)}, p=${escapeHtml((v.p_exploit ?? 0).toFixed(3))}`
+            + `${v.in_kev ? ' <span style="color:#ff6b6b">[KEV]</span>' : ""}`
+            + ` — ${escapeHtml(v.service)}:${escapeHtml(v.port)}`
           ).join("")
         : "";
+      const kev = d.in_kev ? ' <span style="color:#ff6b6b">[KEV]</span>' : "";
+      const zone = d.zone ? `<br>Zone: ${escapeHtml(d.zone)}` : "";
+      const jewel = d.is_crown_jewel ? '<br><b style="color:#ffd166">crown jewel</b>' : "";
       tooltip.style("display", "block")
-        .html(`<b>${escapeHtml(d.hostname)}</b> (${escapeHtml(d.id)})<br>
-               Max CVSS: ${escapeHtml(d.max_cvss)}${vulns}`);
+        .html(`<b>${escapeHtml(d.hostname)}</b> (${escapeHtml(d.id)})${kev}${jewel}${zone}<br>
+               P(exploit): ${escapeHtml((d.max_p_exploit ?? 0).toFixed(3))}
+               &nbsp;·&nbsp; Max CVSS: ${escapeHtml(d.max_cvss)}${vulns}`);
     })
     .on("mousemove", event => {
       tooltip.style("left", (event.pageX + 12) + "px")
@@ -167,8 +175,10 @@ d3.json("data/graph.json").then(data => {
     .on("mouseout", () => tooltip.style("display", "none"));
 
   node.append("circle")
-    .attr("r", d => 10 + d.max_cvss * 2)
-    .attr("fill", d => cvssColor(d.max_cvss));
+    .attr("r", d => 10 + (d.max_p_exploit ?? 0) * 20)
+    .attr("fill", d => riskColor(d.max_p_exploit))
+    .attr("stroke", d => d.in_kev ? "#ff6b6b" : "none")
+    .attr("stroke-width", d => d.in_kev ? 3 : 0);
 
   // Label below the circle at one fixed, comfortable size for every node —
   // cramming text inside the circle meant shrinking it to the point of being
@@ -178,7 +188,7 @@ d3.json("data/graph.json").then(data => {
   node.append("text")
     .attr("class", "node-label")
     .attr("text-anchor", "middle")
-    .attr("y", d => 10 + d.max_cvss * 2 + 16)
+    .attr("y", d => 10 + (d.max_p_exploit ?? 0) * 20 + 16)
     .text(d => d.hostname.length > 24 ? d.hostname.slice(0, 23) + "…" : d.hostname);
 
   simulation.on("tick", () => {
@@ -189,14 +199,14 @@ d3.json("data/graph.json").then(data => {
         const dx = d.target.x - d.source.x;
         const dy = d.target.y - d.source.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const r = 10 + d.target.max_cvss * 2;
+        const r = 10 + (d.target.max_p_exploit ?? 0) * 20;
         return d.target.x - (dx / dist) * (r + 4);
       })
       .attr("y2", d => {
         const dx = d.target.x - d.source.x;
         const dy = d.target.y - d.source.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const r = 10 + d.target.max_cvss * 2;
+        const r = 10 + (d.target.max_p_exploit ?? 0) * 20;
         return d.target.y - (dy / dist) * (r + 4);
       });
 
@@ -212,7 +222,7 @@ d3.json("data/graph.json").then(data => {
       const dx = t.x - s.x;
       const dy = t.y - s.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const r = 10 + t.max_cvss * 2;
+      const r = 10 + (t.max_p_exploit ?? 0) * 20;
       riskLayer.append("line")
         .attr("x1", s.x).attr("y1", s.y)
         .attr("x2", t.x - (dx / dist) * (r + 4))

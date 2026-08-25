@@ -216,8 +216,9 @@ document.getElementById("generate").addEventListener("click", async () => {
       return;
     }
 
-    const choke = data.chokePoints.filter(c => c.score > 0)
-      .map(c => `${escapeHtml(c.hostname)} (${c.score})`).join(", ") || "none — fully connected graph";
+    const choke = data.chokePoints.filter(c => c.share > 0)
+      .map(c => `${escapeHtml(c.hostname)} (${(c.share * 100).toFixed(0)}% of chains)`)
+      .join(", ") || "none — no host sits on a shared route";
     const risk = data.riskPath.length ? data.riskPath.map(escapeHtml).join(" &rarr; ") : "none found";
     setStatus("success",
       `Graph built: ${data.nodeCount} host${data.nodeCount === 1 ? "" : "s"}, ` +

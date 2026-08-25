@@ -23,10 +23,12 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))  # so this runs correctly r
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")  # Windows defaults to cp1252, which can't print — em dashes
 
+from src.analysis import find_choke_points, most_probable_path
 from src.cve_lookup import build_hosts_from_known_cves
-from src.graph import build_graph
-from src.analysis import find_choke_points, find_highest_risk_path
+from src.exploitability import annotate_hosts
 from src.export import export_graph
+from src.graph import build_graph
+from src.segmentation import resolve_policy
 from src.serve import serve_dashboard
 
 
@@ -66,6 +68,11 @@ parser.add_argument("--interactive", "-i", action="store_true",
                      help="type hosts/CVEs at the prompt instead of reading a spec file")
 parser.add_argument("--no-serve", action="store_true",
                      help="just export data/graph.json, don't start a server or open a browser")
+parser.add_argument("--policy", default="data/segmentation.json",
+                     help="segmentation policy to apply (default: data/segmentation.json; "
+                          "one zone per /24 is synthesised if the file is absent)")
+parser.add_argument("--offline", action="store_true",
+                     help="skip EPSS/KEV lookups and estimate exploitability from CVSS")
 args = parser.parse_args()
 
 if args.interactive:
@@ -82,30 +89,45 @@ print(f"Looking up {num_cves} CVE(s) from NVD (cached lookups are instant, "
       f"new ones are rate-limited to ~1 every 6s)...")
 hosts = build_hosts_from_known_cves(spec)
 
+print("Resolving exploitability" + (" (offline — CVSS estimates)" if args.offline
+                                    else " (EPSS + CISA KEV)") + "...")
+hosts = annotate_hosts(hosts, offline=args.offline)
+
 print("\nHosts:")
 for h in hosts:
     max_cvss = max((v["cvss"] for v in h["vulns"]), default=0)
+    max_p = max((v.get("p_exploit", 0) for v in h["vulns"]), default=0)
     role = f" [{h['role']}]" if "role" in h else ""
+    kev = " [KEV]" if any(v.get("in_kev") for v in h["vulns"]) else ""
     cves = ", ".join(v["cve"] for v in h["vulns"])
-    print(f"  {h['hostname']}{role} ({h['ip']}) — max CVSS {max_cvss} — {cves}")
+    print(f"  {h['hostname']}{role}{kev} ({h['ip']}) — max CVSS {max_cvss}, "
+          f"P(exploit) {max_p:.4f} — {cves}")
 
-G = build_graph(hosts)
-print(f"\nGraph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
+policy = resolve_policy(hosts, args.policy)
+G = build_graph(hosts, policy)
+_n, _e = G.number_of_nodes(), G.number_of_edges()
+_density = _e / (_n * (_n - 1)) if _n > 1 else 0
+print(f"\nGraph: {_n} nodes, {_e} edges (density {_density:.3f})")
 
-print("\nChoke points (betweenness centrality):")
-for ip, score in find_choke_points(G)[:5]:
-    print(f"  {G.nodes[ip]['hostname']} ({ip}): {score:.3f}")
+chokes = find_choke_points(G, policy, top=5)
+if chokes:
+    print("\nChoke points — share of top attack chains passing through:")
+    for ip, share, count, total in chokes:
+        print(f"  {G.nodes[ip]['hostname']} ({ip}): {share:.1%} ({count}/{total} chains)")
 
-risk = find_highest_risk_path(G)
+risk = most_probable_path(G, policy)
 risk_path_ips = risk["path"] if risk else []
 if risk:
-    path_str = " → ".join(G.nodes[n]["hostname"] for n in risk["path"])
-    print(f"\nHighest risk path ({risk['hops']} hop{'s' if risk['hops'] != 1 else ''}): {path_str}")
+    path_str = " → ".join(G.nodes[x]["hostname"] for x in risk["path"])
+    print(f"\nMost probable chain ({risk['hops']} hop{'s' if risk['hops'] != 1 else ''}): {path_str}")
+    print(f"  P(success) = {risk['probability']:.4f}")
 else:
     print("\nNo multi-host path found — need at least 2 connected hosts to chain an attack path.")
 
 source_label = "known CVEs — typed in interactively" if args.interactive else f"known CVEs — {args.spec_path}"
-export_graph(G, "data/graph.json", risk_path=risk_path_ips, source_label=source_label)
+export_graph(G, "data/graph.json", risk_path=risk_path_ips, source_label=source_label,
+             path_probability=risk["probability"] if risk else None,
+             choke_points=[{"id": c[0], "share": round(c[1], 4)} for c in chokes])
 
 if args.no_serve:
     print("\nRun `python -m http.server 8080` and open dashboard.html to view this graph.")

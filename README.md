@@ -1,139 +1,231 @@
 # Graph-Based Attack Path Modeler
 
-A Python pipeline that ingests Nessus vulnerability scan data into a NetworkX graph model to map host-to-host attack paths based on exposed services and known CVEs. Includes a GNN classifier built with PyTorch Geometric and an interactive D3.js dashboard.
+Turns vulnerability scan data into a directed attack graph, ranks the chains an attacker is most likely to complete, finds the hosts that most of those chains run through, and trains a graph neural network to predict which lateral-movement edges lie on an optimal route to a crown-jewel asset.
+
+Exploitability comes from **EPSS** and **CISA KEV** rather than CVSS alone, edge weights are `-log(P(exploit))` so a path's cost is a probability, and every model is reported next to the baselines it has to beat.
 
 ---
 
-## Features
+## What it does
 
-- **Nessus Parser** — ingests `.nessus` XML scan files and extracts hosts, CVEs, CVSS scores, ports, and services
-- **Known-CVE Input** — no Nessus scan? Type in hosts + CVE IDs and the pipeline pulls real CVSS scores live from the [NVD API](https://nvd.nist.gov/developers), either from the terminal ([`main_from_cves.py`](main_from_cves.py)) or directly in the browser ([`builder.html`](builder.html))
-- **Attack Graph** — builds a directed NetworkX graph where edges represent lateral movement paths between hosts, weighted by exploit ease (1/CVSS)
-- **Cross-Subnet Modeling** — bridges network segments through any host marked as a gateway, for arbitrary topologies (not tied to one hardcoded subnet)
-- **Path Analysis** — ranks all attack paths by cumulative risk score and identifies choke points using betweenness centrality
-- **GNN Classifier** — PyTorch Geometric GCNConv model for edge-level high-risk lateral movement prediction
-- **Matplotlib Visualization** — static attack graph with color-coded risk levels and highlighted attack paths
-- **D3.js Dashboard** — interactive browser visualization with draggable nodes, hover tooltips showing CVE details, and highlighted attack chains
+- **Nessus parser** — ingests `.nessus` XML and extracts hosts, CVEs, CVSS, ports, services
+- **Known-CVE input** — no scan? Type hosts and CVE IDs; CVSS is pulled live from the [NVD API](https://nvd.nist.gov/developers), from the terminal (`main_from_cves.py`) or the browser (`builder.html`)
+- **Real exploitability** — [EPSS](https://www.first.org/epss/) probability per CVE, floored by presence in the [CISA KEV catalogue](https://www.cisa.gov/known-exploited-vulnerabilities-catalog); both cached, both degrading to a CVSS estimate offline
+- **Segmentation-aware graph** — an edge exists only where firewall policy permits the source zone to reach a port the target is actually vulnerable on
+- **Probabilistic path ranking** — Dijkstra over `-log(p)` weights returns the *most probable* attack chain, with its end-to-end success probability
+- **Choke-point analysis** — hosts ranked by the share of top attack chains that traverse them
+- **Edge-risk GNN** — a 3-layer GCN predicting whether an edge lies on an optimal route to a crown jewel, benchmarked against three baselines
+- **Visualisation** — matplotlib graph coloured by exploitation probability, plus an interactive D3 dashboard
 
 ---
 
-## Project structure
+## Results
+
+Eight independent synthetic estates, a fresh train/test split each, mean ± sd of test-set F1. Reproduce with `python experiments/benchmark.py 8`.
+
+| Model | F1 | What it tells you |
+|---|---|---|
+| majority class | 0.000 ± 0.000 | the floor — 80% of edges are negative |
+| `max_cvss > 8.5` on the target | 0.596 ± 0.221 | a single threshold on one node feature |
+| logistic regression, no graph | 0.818 ± 0.108 | same features, both endpoints, no message passing |
+| **GCN (3-layer)** | **0.935 ± 0.121** | **+0.117 over the no-graph model** |
+
+Graphs average 71 nodes and 722 edges at 19.7% positive.
+
+The number that matters is the gap between the last two rows. Both models see identical node features; only the GCN can aggregate across the topology, and that is worth roughly twelve F1 points. The spread (± 0.121) is real — on one seed the GCN reached only 0.652 — and is reported rather than smoothed away.
+
+---
+
+## Why the weights are `-log(p)`
+
+The original version weighted edges `1 / CVSS` and summed along a path. That total is not a quantity of anything: adding reciprocals of severity scores yields a number with no units and no interpretation.
+
+Weighting by `-log(P(exploit))` makes the sum meaningful:
+
 ```
-attack-path-modeler/
-├── data/
-│   ├── sample.nessus            # Sample Nessus scan data
-│   ├── graph.json                # Exported graph for D3 dashboard (whichever pipeline ran last)
-│   ├── known_hosts.json          # Example known-CVE spec — DMZ breach scenario
-│   └── known_hosts_ivanti_vpn.json  # Example known-CVE spec — chained Ivanti VPN exploit
-├── src/
-│   ├── parser.py        # Nessus XML parser
-│   ├── cve_lookup.py     # NVD API lookup — builds hosts from known CVE IDs
-│   ├── graph.py           # NetworkX graph builder
-│   ├── analysis.py        # Attack path ranking and choke point detection
-│   ├── export.py          # JSON export for D3
-│   ├── serve.py            # Local server + auto-opens the dashboard
-│   └── gnn.py                # PyTorch Geometric GNN classifier
-├── main.py               # Pipeline runner — Nessus scan input
-├── main_from_cves.py     # Pipeline runner — known-CVE input (no Nessus needed)
-├── dashboard.html        # Interactive D3.js visualization
-├── builder.html          # Type hosts/CVEs in the browser, regenerates the graph live
-└── requirements.txt
+cost(path) = Σ -log(pᵢ) = -log(∏ pᵢ)      ⟹      P(chain succeeds) = e^(-cost)
 ```
+
+So the minimum-cost path Dijkstra returns *is* the most probable attack chain, and its cost converts directly back into a probability. Same algorithm, one changed line, and the output becomes something you can defend in a room.
+
+### CVSS is severity, not likelihood
+
+Two CVEs from the sample dataset, both **CVSS 7.5**:
+
+| CVE | CVSS | P(exploit) | Source |
+|---|---|---|---|
+| CVE-2017-7508 | 7.5 | **0.048** | EPSS |
+| CVE-2015-1427 | 7.5 | **0.999** | CISA KEV — actively exploited |
+
+CVSS ranks these identically. One is twenty times less likely to be used against you than the other is certain to be. Any model built on CVSS alone cannot see that difference; this one prices it directly into the path cost.
+
+---
+
+## The prediction target, and why the previous one was wrong
+
+**The original label was broken, and the fix is the most important change in this project.**
+
+It was:
+
+```python
+label = 1 if G.nodes[tgt]["max_cvss"] > 8.5 else 0
+```
+
+while `max_cvss` was simultaneously node feature 0, handed to the classifier raw through the skip connection. The label was a deterministic function of an input. A one-line threshold rule with no model at all scored **100% accuracy** on it.
+
+The perfect precision and recall the old README reported were not evidence of learning. They were the only achievable outcome, and no quantity of real scan data would have changed that — the task was unlearnable-by-construction. This is the kind of defect that survives review precisely because the numbers look excellent.
+
+The replacement asks something a node cannot answer about itself:
+
+> Does this edge lie on an **optimal route** from where it starts to a crown-jewel asset?
+
+Formally, for edge `(u, v)` with `d(x)` the cheapest cost from `x` to any crown jewel:
+
+```
+label(u, v) = 1   iff   w(u, v) + d(v) ≤ d(u) + tolerance
+```
+
+That is the Bellman optimality condition on the attack graph — it marks the edges an optimal attacker would actually traverse. `d(u)` and `d(v)` are global quantities defined by the whole downstream topology and the location of assets the node has no local knowledge of, so predicting it requires aggregating information across the graph. That is the entire justification for using a GNN, and the old label did not require it.
+
+**An honest caveat.** The new label still *correlates* with local exploitability, and it should — an optimal attacker move does tend toward hosts that are easy to exploit. An oracle-tuned CVSS threshold reaches F1 0.68–0.88 on it. What no longer happens is *recovery*: no threshold reproduces the label outright. The distinction between correlation and recovery is the difference between a hard task and a fake one, and `tests/test_leakage.py` enforces it.
+
+---
+
+## Segmentation: why the graph is no longer complete
+
+The original builder connected every host to every other host in its subnet, giving a complete digraph — density 0.500 on the synthetic set. Two consequences:
+
+- **Choke-point analysis returned nothing.** In a complete subgraph the shortest route between any two hosts is the direct edge, so nothing routes through anyone. Betweenness centrality scored **1 node out of 100** above zero, and that node was the gateway the code had hardcoded. The algorithm was rediscovering a constant.
+- **Message passing over-smoothed**, which the old code worked around with a skip connection rather than fixing the cause.
+
+An edge now requires *reachability to a vulnerable service*: policy must permit the source zone to reach a port, and the target must actually be vulnerable on that port. Density drops from 0.500 to 0.167, and choke points become readable:
+
+```
+Choke points — share of the top attack chains passing through:
+  dev-workstation       65.0%  (26/40 chains)
+  web-server            62.5%  (25/40 chains)
+  mail-server           52.5%  (21/40 chains)
+```
+
+That reads as *"containing this host breaks 26 of the 40 most probable routes to your crown jewels"* — a sentence a defender can act on. Plain betweenness could not produce it.
+
+Policy lives in [`data/segmentation.json`](data/segmentation.json):
+
+```json
+{
+  "zones":  { "dmz": ["10.0.0.0/24"], "internal": ["10.0.1.0/24"] },
+  "rules": [
+    { "from": "internet", "to": "dmz",      "ports": [443, 8080, 25, 143, 1194] },
+    { "from": "dmz",      "to": "internal", "ports": [445, 3389, 389] }
+  ],
+  "entry_points": ["internet"],
+  "crown_jewels": ["10.0.1.4"]
+}
+```
+
+If no policy file matches the hosts, one is synthesised (a zone per /24, gateways bridging outward). A policy written for a *different* estate is detected by coverage check and rejected rather than obeyed — otherwise it silently produces an empty graph, which is a wrong answer wearing the costume of a right one.
 
 ---
 
 ## Installation
+
 ```bash
 pip install -r requirements.txt
 ```
-Requirements: `networkx`, `matplotlib`, `torch`, `torch-geometric`
+
+`networkx`, `matplotlib`, `torch`, `torch-geometric`. No other dependencies — the EPSS and KEV clients use `urllib`, and the logistic-regression baseline is a single `torch.nn.Linear` rather than a scikit-learn import.
 
 ## Usage
 
-**From a Nessus scan:**
 ```bash
-python main.py
+python main.py                    # Nessus scan, live EPSS + KEV
+python main.py --offline          # no network; CVSS-derived estimates
+python main.py --no-plot          # skip the matplotlib window
+python main.py --skip-gnn         # skip model training
 ```
-This will:
-1. Parse `data/sample.nessus`
-2. Build the attack graph
-3. Find and display the highest risk attack path
-4. Export `data/graph.json`
-5. Train the GNN classifier on synthetic data
 
-**From known CVEs, no Nessus scan required:**
 ```bash
-python main_from_cves.py                    # uses data/known_hosts.json
-python main_from_cves.py path/to/hosts.json  # or your own host/CVE spec
-python main_from_cves.py --interactive       # type hosts/CVEs at the prompt instead
-python main_from_cves.py --no-serve          # just export, skip auto-opening the dashboard
+python main_from_cves.py                  # uses data/known_hosts.json
+python main_from_cves.py path/to/spec.json
+python main_from_cves.py --interactive    # type hosts and CVEs at the prompt
+python main_from_cves.py --policy data/my_segmentation.json
 ```
-Edit `data/known_hosts.json` with your own hosts — just an IP, a list of CVE IDs, and `"role": "gateway"` on whatever bridges your network segments (firewall, VPN concentrator, jump host) — or skip the file and use `--interactive` to type them in at the terminal instead. Real CVSS scores are pulled live from the [NVD API](https://nvd.nist.gov/developers) and cached to `data/.cve_cache.json`, so re-runs are instant. New (uncached) lookups are rate-limited to roughly one every 6 seconds to stay under NVD's unauthenticated request limit — looking up a handful of CVEs takes well under a minute.
 
-Two ready-to-run example scenarios are included:
-- `data/known_hosts.json` — a DMZ breach: two public entry points (MOVEit SQLi, Jenkins CLI file read) pivoting through a Citrix Bleed session hijack on the reverse proxy to an internal Spring4Shell-vulnerable app
-- `data/known_hosts_ivanti_vpn.json` — the real chained Ivanti Connect Secure exploit (auth bypass + command injection, exploited together in the wild in Jan 2024) into an AD takeover via noPac
-
-**Or skip files entirely — type CVEs into the dashboard itself:**
-
-Run either pipeline once to get the server running, then open `builder.html` (there's a link at the top of the dashboard). Add hosts, paste in CVE IDs, mark a gateway if you have one, and hit **Generate Attack Graph** — it looks up real CVSS scores from NVD, rebuilds the graph, and links straight to the updated dashboard. No JSON editing, no restarting the script.
-
-By default, `main_from_cves.py` starts a local server and opens the dashboard in your browser automatically. `main.py` still requires the manual two-step (it's the older entry point and doesn't auto-serve):
 ```bash
-python -m http.server 8080
-```
-Then open `http://localhost:8080/dashboard.html`.
-
-Either pipeline writes `data/graph.json` — whichever ran most recently is what the dashboard shows. It displays a "Source:" line under the title so you always know which dataset is currently loaded, and highlights the actual highest-risk path for whatever graph is loaded (computed server-side — not tied to the original demo's specific IPs).
-
-## How it works
-
-### 1. Graph construction
-Each host becomes a node with attributes: hostname, list of CVEs, and max CVSS score. Directed edges connect hosts on the same subnet, weighted by `1 / max_cvss` — lower weight means easier to exploit. Any host marked `"role": "gateway"` bridges to every host outside its own subnet, modeling cross-network lateral movement for however many segments your topology actually has (the sample dataset falls back to a fixed VPN-gateway bridge for backward compatibility, since it predates the `role` field).
-
-### 2. Attack path ranking
-Uses Dijkstra's algorithm (`nx.shortest_path`) weighted by exploit ease to find the most dangerous attack chain. All simple paths are enumerated and ranked by cumulative risk score.
-
-### 3. GNN classifier
-Node features: `[max_cvss, num_vulns, num_open_ports, is_internal_subnet]`, min-max normalized.
-
-Two GCNConv layers learn node embeddings from the graph structure, with a skip connection concatenating each node's raw features back in before classification — the synthetic graph is dense enough (~99 average degree on 100 nodes) that GCN message-passing alone smooths a host's own signal into the neighborhood average, and the skip connection keeps it recoverable. Source and target embeddings are concatenated per edge and fed into a linear classifier that predicts HIGH/LOW risk for each lateral movement path, trained on an 80/20 edge split with class weights computed from the training data.
-
-On the included synthetic dataset this reaches 100% precision/recall on held-out test edges. Real scan data will be noisier and less linearly separable than the synthetic generator, so expect lower (but hopefully still meaningfully above baseline) accuracy there — the model hasn't been validated against real Nessus output yet.
-
-![GNN training converging to 100% precision/recall on train and held-out test edges](GNN_Training_Results.png)
-
-### 4. D3.js dashboard
-- Node color and size encode CVSS risk level (red = critical, orange = high)
-- Hover any node to see its full CVE list
-- Hover any edge to see the CVE and service that enables that lateral movement
-- Red arrows highlight the highest risk attack chain
-- Drag nodes to rearrange the layout
-
-## Security notes
-
-`main_from_cves.py` and `builder.html` run a local web server that accepts input and makes outbound requests, so it got a real pass rather than being left as an afterthought:
-
-- **Loopback-only binding.** The server binds `127.0.0.1`, not `0.0.0.0` — it's reachable only from the local machine, not anyone else on the same network.
-- **Input validation before any network or graph call.** CVE IDs are checked against `^CVE-\d{4}-\d{4,}$` and IPs against a real IPv4 pattern before either hits the NVD API or `build_graph` — this also closes a URL-parameter-injection path where an unvalidated CVE ID was concatenated straight into the NVD request's query string.
-- **Output encoding.** Both `dashboard.html`'s tooltips and `builder.html`'s status panel render hostnames/CVE data through an `escapeHtml()` helper before insertion — hostnames are user-typed and round-trip through the graph and the `/api/generate` response, so without this a hostname like `<img src=x onerror=...>` would execute in the browser. Confirmed fixed by actually submitting that payload through the form and dashboard, not just by inspecting the code.
-- **Defense-in-depth on `POST /api/generate`:** an `Origin` header check rejects cross-site requests (modern browsers already block this via CORS preflight for a JSON body, but the server doesn't rely on that alone), a body-size cap avoids buffering an oversized payload into memory, and a host-count cap bounds the cost of `find_highest_risk_path`'s path search — that function is roughly O(n²) simple-path searches, cheap for a handful of hosts but not something an unbounded input list should be allowed to drive.
-
-## Sample attack chain
-Running against the included sample data produces this cross-subnet attack path:
-
-```
-web-server (CVE-2021-44228, CVSS 10.0)
-    → vpn-gateway (CVE-2017-7508, CVSS 7.5)
-        → domain-controller (CVE-2020-1472 ZeroLogon, CVSS 10.0)
+python experiments/benchmark.py 8   # the results table above
+python -m unittest discover -s tests -t .
 ```
 
-An attacker exploits Log4Shell on the public web server, pivots through the VPN gateway, and achieves domain compromise via ZeroLogon.
+Sample output:
 
-![Attack path graph — highest risk path highlighted in red](attack_path_graph.png)
+```
+Most probable attack chain:
+  internet -> web-server -> domain-controller
+  P(success) = 0.9969   cost = 0.0031   hops = 2
+    internet     -> web-server          CVE-2021-44228 via https/443  p=0.9990 (kev)  [KEV]
+    web-server   -> domain-controller   CVE-2021-34527 via smb/445    p=0.9979 (kev)  [KEV]
+```
 
-## Future work
-- Train GNN on real Nessus scan data from heterogeneous networks
-- Add MITRE ATT&CK technique mapping per CVE
-- Implement temporal attack path modeling (time-based exploit chaining)
-- Add remediation priority scoring based on choke point centrality
+---
+
+## Project structure
+
+```
+attack-path-modeler/
+├── src/
+│   ├── parser.py           # Nessus XML -> hosts
+│   ├── cve_lookup.py       # NVD API: CVE ID -> CVSS
+│   ├── exploitability.py   # EPSS + CISA KEV -> P(exploit)
+│   ├── segmentation.py     # zone/port policy, coverage checking
+│   ├── graph.py            # reachability-gated graph, -log(p) weights
+│   ├── labels.py           # Bellman-optimality edge label
+│   ├── features.py         # node features (shared by every model)
+│   ├── baselines.py        # majority / CVSS threshold / logistic regression
+│   ├── gnn.py              # 3-layer GCN edge classifier + comparison
+│   ├── analysis.py         # path ranking, choke points
+│   ├── synthetic.py        # segmented synthetic estate
+│   ├── metrics.py          # precision / recall / F1
+│   ├── export.py           # JSON for the D3 dashboard
+│   └── serve.py            # local server for builder.html
+├── experiments/benchmark.py  # multi-seed evaluation
+├── tests/                    # 28 tests, incl. leakage regressions
+├── data/
+│   ├── sample.nessus
+│   ├── segmentation.json
+│   └── known_hosts*.json
+├── main.py
+├── main_from_cves.py
+├── dashboard.html
+└── builder.html
+```
+
+---
+
+## Tests
+
+```bash
+python -m unittest discover -s tests -t .
+```
+
+28 tests. The ones worth naming are in [`tests/test_leakage.py`](tests/test_leakage.py), because they encode the two defects that made the original results meaningless:
+
+- **`test_threshold_on_target_cvss_does_not_solve_the_task`** — fails if the label ever again becomes recoverable from a single node feature
+- **`test_message_passing_excludes_test_edges`** — fails if held-out edges are ever again propagated through the network before being scored (the original trained message passing over the full edge set, then evaluated on edges inside it)
+- **`test_label_depends_on_graph_not_just_endpoints`** — fails if every edge into a given host shares a label, which would mean the topology is decorative
+- **`test_forbidden_features_absent`** — fails if `is_crown_jewel` or any distance-to-asset quantity enters the feature set
+
+Writing these first would have caught the original bug. They exist now so it cannot come back quietly.
+
+---
+
+## What this does and doesn't prove
+
+**It does show** that on a segmented synthetic estate, a graph neural network predicts optimal-route membership meaningfully better than a linear model given identical node features (F1 0.935 vs 0.818 over eight independent networks), and that the improvement comes from message passing rather than from the label leaking into an input.
+
+**It does not show** anything about a real network. The synthetic estate is generated by rules I wrote, and those rules decide the answer as much as the model does. Real scan data is noisier, real segmentation is messier and partly undocumented, and real asset criticality is rarely as clean as a per-zone constant.
+
+The CVEs in the synthetic set are fabricated, so EPSS has no scores for them and exploitability there falls back to a CVSS-derived estimate — the results table is a statement about the model, not about exploitation in the wild. The EPSS and KEV integration is exercised for real only on the Nessus and known-CVE paths, where the CVEs exist.
+
+The `-log(p)` path probabilities inherit every assumption EPSS makes, and treat hops as independent, which they are not: an attacker who has already compromised one host is not facing baseline odds on the next. The numbers are a ranking signal, not a forecast.
+
+**Next:** validating against real scan data from a lab estate; modelling hop dependence instead of assuming independence; and per-CVE MITRE ATT&CK technique mapping so an edge carries the technique it represents, not just the CVE.

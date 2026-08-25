@@ -1,0 +1,19 @@
+{
+  "_comment": "Segmentation policy for data/sample.nessus. An attack edge exists only where these rules permit the source zone to reach a port the target host is actually vulnerable on.",
+  "zones": {
+    "dmz":      ["10.0.0.0/24"],
+    "internal": ["10.0.1.0/24"]
+  },
+  "criticality": {
+    "dmz": 0.4,
+    "internal": 0.7
+  },
+  "rules": [
+    { "from": "internet", "to": "dmz",      "ports": [443, 8080, 25, 143, 1194] },
+    { "from": "dmz",      "to": "dmz",      "ports": [22, 443, 3306, 8080] },
+    { "from": "dmz",      "to": "internal", "ports": [445, 3389, 389] },
+    { "from": "internal", "to": "internal", "ports": [22, 445, 3389, 389, 873, 9200] }
+  ],
+  "entry_points": ["internet"],
+  "crown_jewels": ["10.0.1.4"]
+}

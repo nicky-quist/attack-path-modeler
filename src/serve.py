@@ -9,15 +9,17 @@ import os
 import socketserver
 import webbrowser
 
-from src.analysis import find_choke_points, find_highest_risk_path
+from src.analysis import find_choke_points, most_probable_path
 from src.cve_lookup import build_hosts_from_known_cves
 from src.export import export_graph
+from src.exploitability import annotate_hosts
 from src.graph import build_graph
+from src.segmentation import resolve_policy
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 MAX_BODY_BYTES = 100_000  # generous for a host/CVE list; blocks trivial memory-exhaustion attempts
-MAX_HOSTS = 50            # find_highest_risk_path is O(n^2) path searches — cap input, not just be fast
+MAX_HOSTS = 50            # keeps k-shortest-path enumeration bounded on user-supplied specs
 
 
 class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -51,23 +53,28 @@ class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
                 raise ValueError(f"Too many hosts ({len(spec)}) — max {MAX_HOSTS} per request.")
 
             hosts = build_hosts_from_known_cves(spec)
-            G = build_graph(hosts)
-            choke_points = find_choke_points(G)
-            risk = find_highest_risk_path(G)
+            hosts = annotate_hosts(hosts)
+            policy = resolve_policy(hosts, "data/segmentation.json")
+            G = build_graph(hosts, policy)
+            choke_points = find_choke_points(G, policy, top=5)
+            risk = most_probable_path(G, policy)
             risk_path_ips = risk["path"] if risk else []
 
             export_graph(G, "data/graph.json", risk_path=risk_path_ips,
-                         source_label="known CVEs — typed in via web form")
+                         source_label="known CVEs — typed in via web form",
+                         path_probability=risk["probability"] if risk else None,
+                         choke_points=[{"id": c[0], "share": round(c[1], 4)} for c in choke_points])
 
             result = {
                 "ok": True,
                 "nodeCount": G.number_of_nodes(),
                 "edgeCount": G.number_of_edges(),
                 "chokePoints": [
-                    {"hostname": G.nodes[ip]["hostname"], "score": round(score, 3)}
-                    for ip, score in choke_points[:5]
+                    {"hostname": G.nodes[ip]["hostname"], "share": round(share, 4)}
+                    for ip, share, _c, _t in choke_points
                 ],
                 "riskPath": [G.nodes[ip]["hostname"] for ip in risk_path_ips],
+                "riskPathProbability": risk["probability"] if risk else None,
             }
             self._send_json(200, result)
 
