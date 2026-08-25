@@ -15,7 +15,7 @@ Exploitability comes from **EPSS** and **CISA KEV** rather than CVSS alone, edge
 - **Probabilistic path ranking** — Dijkstra over `-log(p)` weights returns the *most probable* attack chain, with its end-to-end success probability
 - **Choke-point analysis** — hosts ranked by the share of top attack chains that traverse them
 - **Edge-risk GNN** — a 3-layer GCN predicting whether an edge lies on an optimal route to a crown jewel, benchmarked against three baselines
-- **Visualisation** — matplotlib graph coloured by exploitation probability, plus an interactive D3 dashboard
+- **Two complementary views** — an interactive D3 dashboard for topology, and a static risk report answering what a node-link drawing cannot: does severity predict exploitation, how do the chains rank, which host do you contain
 
 ---
 
@@ -50,7 +50,10 @@ So the minimum-cost path Dijkstra returns *is* the most probable attack chain, a
 
 ### CVSS is severity, not likelihood
 
-Two CVEs from the sample dataset, both **CVSS 7.5**:
+![Attack path risk report](attack_path_report.png)
+
+The top panel is the claim this project rests on, drawn from the sample scan. Two CVEs
+sit at the same **CVSS 7.5** with exploitation probabilities of 0.048 and 0.999:
 
 | CVE | CVSS | P(exploit) | Source |
 |---|---|---|---|
@@ -138,11 +141,22 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
-python main.py                    # Nessus scan, live EPSS + KEV
+python main.py                    # Nessus scan, live EPSS + KEV, risk report window
+python main.py --serve            # also open the interactive D3 dashboard in a browser
 python main.py --offline          # no network; CVSS-derived estimates
-python main.py --no-plot          # skip the matplotlib window
+python main.py --save-plot        # write the report to attack_path_report.png
+python main.py --graph-plot       # the static node-link diagram instead of the report
+python main.py --no-plot          # no figure at all
 python main.py --skip-gnn         # skip model training
 ```
+
+**The two views do different jobs.** The dashboard owns topology, because that is
+what interaction helps with — drag nodes apart, hover an edge for the CVE behind it.
+The static report answers what a node-link drawing is bad at: whether severity
+predicts exploitation, how the chains rank against each other, and which host to
+contain. `--graph-plot` still renders the node-link diagram if you want a static
+topology picture without starting a server, but it is not the default, because
+duplicating the dashboard in a window you cannot interact with is not a second view.
 
 ```bash
 python main_from_cves.py                  # uses data/known_hosts.json
@@ -183,6 +197,7 @@ attack-path-modeler/
 │   ├── baselines.py        # majority / CVSS threshold / logistic regression
 │   ├── gnn.py              # 3-layer GCN edge classifier + comparison
 │   ├── analysis.py         # path ranking, choke points
+│   ├── report.py           # severity-vs-likelihood, chain ranking, choke points
 │   ├── synthetic.py        # segmented synthetic estate
 │   ├── metrics.py          # precision / recall / F1
 │   ├── export.py           # JSON for the D3 dashboard
@@ -193,6 +208,7 @@ attack-path-modeler/
 │   ├── sample.nessus
 │   ├── segmentation.json
 │   └── known_hosts*.json
+├── src/report.py             # the static risk report (see below)
 ├── main.py
 ├── main_from_cves.py
 ├── dashboard.html

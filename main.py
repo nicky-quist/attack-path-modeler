@@ -6,7 +6,8 @@ Pipeline runner — Nessus scan input.
     python main.py --no-plot       # skip the matplotlib window
     python main.py --skip-gnn      # skip model training
     python main.py --serve         # open the interactive D3 dashboard in a browser
-    python main.py --save-plot     # also write the graph to attack_path_graph.png
+    python main.py --save-plot     # also write the figures to PNG
+    python main.py --graph-plot    # the node-link diagram instead of the risk report
 """
 import os
 import sys
@@ -29,6 +30,7 @@ NO_PLOT = "--no-plot" in sys.argv
 SKIP_GNN = "--skip-gnn" in sys.argv
 SERVE = "--serve" in sys.argv
 SAVE_PLOT = "--save-plot" in sys.argv
+GRAPH_PLOT = "--graph-plot" in sys.argv
 
 
 def main():
@@ -77,7 +79,16 @@ def main():
     )
 
     if not NO_PLOT or SAVE_PLOT:
-        plot(G, best, save=SAVE_PLOT, show=not NO_PLOT)
+        if GRAPH_PLOT:
+            # The node-link view, kept for anyone who wants a static topology
+            # picture without starting a server. It is not the default because
+            # the D3 dashboard draws the same thing and lets you interact with it.
+            plot(G, best, save=SAVE_PLOT, show=not NO_PLOT)
+        else:
+            from src.report import risk_report
+            risk_report(G, policy, best=best,
+                        path="attack_path_report.png" if SAVE_PLOT else None,
+                        show=not NO_PLOT)
 
     if not SKIP_GNN:
         run_gnn()
