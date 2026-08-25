@@ -23,6 +23,16 @@ MAX_HOSTS = 50            # keeps k-shortest-path enumeration bounded on user-su
 
 
 class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        # Browsers request /favicon.ico unprompted. There isn't one, and the
+        # resulting 404 in the log looks like the page failed to load something
+        # it needed. Answer it with "no content" instead.
+        if self.path in ("/favicon.ico", "/favicon.png"):
+            self.send_response(204)
+            self.end_headers()
+            return
+        super().do_GET()
+
     def do_POST(self):
         if self.path != "/api/generate":
             self.send_error(404)
