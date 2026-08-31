@@ -2,29 +2,41 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Attack Path Modeler</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attack Path Modeler — Graph View</title>
+  <meta name="description" content="Interactive D3 force-graph visualization of attack paths across network hosts, ranked by EPSS exploitation probability." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
-    body { background: #1a1a2e; margin: 0; font-family: Arial, sans-serif; color: white; }
-    h1 { text-align: center; padding: 20px 0 0; font-size: 22px; color: #e0e0e0; }
-    p  { text-align: center; color: #888; margin: 4px 0 10px; font-size: 13px; }
+    body { background: #0f0f1f; margin: 0; font-family: 'Inter', Arial, sans-serif; color: #e2e8f0; }
+    body::before { content:''; display:block; height:3px; background:linear-gradient(90deg,#e53e3e 0%,#d73027 40%,#f97316 100%); }
+    h1 { text-align: center; padding: 16px 0 0; font-size: 22px; font-weight: 800; color: #f1f5f9;
+      background: linear-gradient(90deg,#f8fafc 0%,#f87171 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+    p  { text-align: center; color: #64748b; margin: 4px 0 10px; font-size: 13px; }
+    a { color: #7ec4ff; transition: color 0.15s; }
+    a:hover { color: #bfdbfe; }
     .node circle { stroke: #fff; stroke-width: 1.5px; cursor: pointer; }
     .node text   { font-size: 11px; fill: white; pointer-events: none; }
     .node .node-label {
       font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
       text-shadow: 0 1px 3px #000, 0 0 5px #000;
     }
     #tooltip {
       position: absolute;
-      background: #2a2a4a;
-      border: 1px solid #555;
-      border-radius: 6px;
-      padding: 10px;
-      font-size: 12px;
+      background: #16162e;
+      border: 1px solid #3a3a5a;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 12.5px;
+      font-family: 'Inter', Arial, sans-serif;
       pointer-events: none;
       display: none;
-      max-width: 240px;
-      line-height: 1.6;
+      max-width: 260px;
+      line-height: 1.65;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     }
   </style>
 </head>
