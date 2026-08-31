@@ -2,25 +2,35 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Attack Path Modeler — Build From CVEs</title>
+  <meta name="description" content="Build attack path graphs from real CVE IDs — no Nessus scan needed. CVSS scores pulled live from NVD." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
-    body { background: #1a1a2e; margin: 0; font-family: Arial, sans-serif; color: white; }
-    .wrap { max-width: 780px; margin: 0 auto; padding: 24px 20px 60px; }
-    h1 { text-align: center; font-size: 22px; color: #e0e0e0; margin: 16px 0 4px; }
-    p.sub { text-align: center; color: #888; font-size: 13px; margin: 0 0 24px; }
-    a { color: #7ec4ff; }
+    body { background: #0f0f1f; margin: 0; font-family: 'Inter', Arial, sans-serif; color: #e2e8f0; }
+    body::before { content:''; display:block; height:3px; background:linear-gradient(90deg,#e53e3e 0%,#d73027 40%,#f97316 100%); }
+    .wrap { max-width: 780px; margin: 0 auto; padding: 32px 20px 60px; }
+    h1 { text-align: center; font-size: 24px; font-weight: 800; color: #f1f5f9; margin: 16px 0 4px;
+      background: linear-gradient(90deg,#f8fafc 0%,#f87171 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+    p.sub { text-align: center; color: #64748b; font-size: 13px; margin: 0 0 24px; }
+    a { color: #7ec4ff; transition: color 0.15s; }
+    a:hover { color: #bfdbfe; }
     .nav { text-align: center; margin-bottom: 16px; font-size: 13px; }
 
     .host-row {
-      background: #22223f;
-      border: 1px solid #3a3a5a;
+      background: #16162e;
+      border: 1px solid #2e2e50;
       border-radius: 8px;
       padding: 14px 16px;
       margin-bottom: 12px;
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
+      transition: border-color 0.15s;
     }
+    .host-row:hover { border-color: #444466; }
     .host-row .full { grid-column: 1 / -1; }
     .host-row label {
       display: block;
@@ -32,14 +42,16 @@
     .host-row input[type=text] {
       width: 100%;
       box-sizing: border-box;
-      background: #1a1a2e;
-      border: 1px solid #444466;
+      background: #0f0f1f;
+      border: 1px solid #3a3a5a;
       border-radius: 4px;
-      color: white;
+      color: #e2e8f0;
       padding: 7px 8px;
       font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
-    .host-row input[type=text]:focus { outline: none; border-color: #7ec4ff; }
+    .host-row input[type=text]:focus { outline: none; border-color: #7ec4ff; box-shadow: 0 0 0 1px #7ec4ff44; }
     .row-footer { display: flex; align-items: center; justify-content: space-between; grid-column: 1 / -1; margin-top: 2px; }
     .role-toggle { font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 6px; }
     .remove-btn {
@@ -56,13 +68,15 @@
       border: none;
       font-size: 14px;
       cursor: pointer;
-      font-weight: bold;
+      font-weight: 700;
+      font-family: 'Inter', Arial, sans-serif;
+      transition: background 0.15s, box-shadow 0.15s;
     }
     button.primary { background: #d73027; color: white; }
-    button.primary:hover { background: #c02a20; }
-    button.primary:disabled { background: #555; cursor: not-allowed; }
-    button.secondary { background: #2a2a4a; color: #ddd; border: 1px solid #444466; }
-    button.secondary:hover { background: #333358; }
+    button.primary:hover { background: #b91c1c; box-shadow: 0 0 18px rgba(215,48,39,0.4); }
+    button.primary:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+    button.secondary { background: #1e1e38; color: #cbd5e1; border: 1px solid #3a3a5a; }
+    button.secondary:hover { background: #2a2a4a; border-color: #5a5a80; }
 
     #status {
       margin-top: 18px;
