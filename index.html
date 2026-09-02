@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attack Path Modeler</title>
+<!--
+  GitHub Pages serves this repo from its root, so the site's base URL lands
+  here. The dashboard is the front door, and this redirects to it.
+
+  Three layers on purpose: the script is instant, the meta refresh covers
+  scripting being off, and the link covers both being blocked. The page is
+  styled so none of that flashes an unstyled white panel on a dark site.
+-->
+<meta http-equiv="refresh" content="0; url=dashboard.html">
+<link rel="canonical" href="dashboard.html">
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  body { display: grid; place-items: center; min-height: 100vh; text-align: center; }
+  .box { padding: 28px 34px; }
+  h1 { font-size: 17px; font-weight: 650; margin: 0 0 6px; }
+  p { color: var(--text-dim); margin: 0 0 16px; font-size: 13.5px; }
+</style>
+<script>location.replace("dashboard.html");</script>
+</head>
+<body>
+  <div class="box">
+    <h1>Attack Path Modeler</h1>
+    <p>Opening the dashboard&hellip;</p>
+    <p><a href="dashboard.html">Dashboard</a> &nbsp;·&nbsp; <a href="builder.html">Build from known CVEs</a></p>
+  </div>
+</body>
+</html>

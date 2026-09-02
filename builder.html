@@ -116,6 +116,24 @@ const generateBtn = document.getElementById("generate");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// Building a graph runs the NVD, EPSS and KEV lookups and the whole Python
+// pipeline behind POST /api/generate. GitHub Pages is static hosting, so on the
+// published copy that endpoint does not exist. Detect it up front and say so,
+// rather than letting the click fail into a network error that reads like a bug
+// in the tool. The dashboard needs no backend and stays fully live either way.
+const HAS_BACKEND = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+
+const NO_BACKEND_HTML =
+  "<b>This is the hosted copy, so the build step is not wired up here.</b><br>" +
+  "Resolving CVSS from NVD, exploit probability from EPSS and CISA KEV, and then " +
+  "ranking the chains all happen in Python — GitHub Pages only serves static files. " +
+  "The form below still works, and the <a href='dashboard.html'>dashboard</a> is fully live " +
+  "on the sample estate.<br><br>To build your own graph:<br>" +
+  "<code>git clone https://github.com/nicky-quist/attack-path-modeler</code><br>" +
+  "<code>pip install -r requirements.txt</code><br>" +
+  "<code>python main.py --serve</code><br><br>" +
+  "then open <code>localhost:8080/builder.html</code>.";
+
 const EXAMPLE = [
   { hostname: "web-server", ip: "10.0.0.10", cves: "CVE-2021-44228, CVE-2023-38408", port: "443", service: "https", gateway: true },
   { hostname: "file-server", ip: "10.0.1.20", cves: "CVE-2021-34527", port: "445", service: "smb" },
@@ -174,6 +192,11 @@ document.getElementById("load-example").addEventListener("click", () => {
 addRow();
 addRow();
 
+if (!HAS_BACKEND) {
+  setStatus("info", NO_BACKEND_HTML);
+  generateBtn.textContent = "Build attack graph (needs the local server)";
+}
+
 function setStatus(kind, html) {
   statusEl.className = "show";
   statusEl.innerHTML = '<div class="notice ' + kind + '">' + html + "</div>";
@@ -209,6 +232,13 @@ generateBtn.addEventListener("click", async () => {
     hosts = collectHosts();
   } catch (e) {
     setStatus("error", esc(e.message));
+    return;
+  }
+
+  // Validate first, so the hosted copy still tells you whether your input is
+  // well formed before explaining that it cannot go any further here.
+  if (!HAS_BACKEND) {
+    setStatus("info", NO_BACKEND_HTML);
     return;
   }
 

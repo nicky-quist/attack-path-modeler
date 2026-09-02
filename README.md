@@ -4,6 +4,17 @@ Turns vulnerability scan data into a directed attack graph, ranks the chains an 
 
 Exploitability comes from **EPSS** and **CISA KEV** rather than CVSS alone, edge weights are `-log(P(exploit))` so a path's cost is a probability, and every model is reported next to the baselines it has to beat.
 
+**[→ Open the live dashboard](https://nicky-quist.github.io/attack-path-modeler/)**
+
+The hosted copy runs the real analysis output for the sample estate: zone lanes, the
+ranked chain, the choke points, every host's CVEs. It is the committed
+[`data/graph.json`](data/graph.json), produced by the pipeline in this repo.
+
+What the hosted copy *cannot* do is build a new graph, because that means calling NVD,
+EPSS and CISA KEV and running the ranking in Python, and GitHub Pages serves static files
+only. [`builder.html`](builder.html) says so plainly when you open it there. Clone and run
+`python main.py --serve` and the same page builds graphs for real.
+
 ---
 
 ## What it does
@@ -232,9 +243,14 @@ attack-path-modeler/
 ├── assets/app.css            # design tokens shared by both pages and report.py
 ├── main.py
 ├── main_from_cves.py
+├── index.html                # GitHub Pages entry point -> dashboard
 ├── dashboard.html            # zone-lane attack graph, chain, choke points
 └── builder.html              # build a graph from typed CVE IDs
 ```
+
+The two pages are plain static files reading `data/graph.json`, which is what lets
+GitHub Pages serve them unchanged from the repo root — no build step, no bundler,
+and the same files the local server serves.
 
 ---
 
