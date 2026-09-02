@@ -1,0 +1,236 @@
+/*
+ * Design tokens and shared components for the two browser views.
+ *
+ * One stylesheet rather than two <style> blocks, because the dashboard and the
+ * builder are one product and were drifting apart: different button shapes,
+ * two slightly different dark backgrounds, three different greys for "muted
+ * text". The palette here is also the palette src/report.py draws with, so the
+ * static report and the web views read as the same tool.
+ */
+
+:root {
+  /* Surfaces, dark to light. Each step is a real elevation, not decoration. */
+  --bg:        #0f1120;
+  --surface:   #171b2f;
+  --surface-2: #1f2440;
+  --surface-3: #2a3054;
+
+  --line:      #2c3355;
+  --line-soft: rgba(255, 255, 255, 0.06);
+
+  --text:      #e9ebf5;
+  --text-dim:  #9aa2bd;
+  --text-faint:#6c7495;
+
+  /* Semantic colour. Red is always "risk", blue is always "likelihood /
+     EPSS", amber is always "crown jewel". They never mean anything else. */
+  --risk:      #ff5d5d;
+  --risk-dim:  #7a2b2b;
+  --info:      #4dabf7;
+  --info-dim:  #2b4a6b;
+  --good:      #3ddc97;
+  --good-dim:  #235c44;
+  --jewel:     #ffd166;
+
+  --radius:    10px;
+  --radius-sm: 6px;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--info); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, .mono { font-family: var(--mono); font-size: 0.92em; }
+
+/* ---------------------------------------------------------------- app shell */
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+  overflow: hidden;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 18px;
+  height: 56px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar .brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.topbar .brand h1 {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 0;
+  white-space: nowrap;
+}
+.topbar .brand .tag {
+  font-size: 12px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar .spacer { flex: 1; }
+.topbar nav { display: flex; align-items: center; gap: 14px; font-size: 13px; }
+/* The bar is a fixed 56px; a wrapping link pushes its second line out of it. */
+.topbar nav a { white-space: nowrap; }
+
+/* -------------------------------------------------------------------- cards */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 15px;
+  margin-bottom: 12px;
+}
+.card > h2 {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 12px;
+}
+.card > h2 .count { color: var(--text-dim); letter-spacing: 0; text-transform: none; font-weight: 500; }
+
+/* --------------------------------------------------------------------- bits */
+
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  vertical-align: 1px;
+}
+.badge.kev   { background: var(--risk-dim);  color: #ffc9c9; }
+.badge.jewel { background: #5c4a1c;          color: var(--jewel); }
+.badge.zone  { background: var(--surface-3); color: var(--text-dim); font-weight: 600; letter-spacing: 0.02em; }
+
+.metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--line-soft); }
+.metric  { background: var(--surface); padding: 9px 2px 8px; }
+.metric .v { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.metric .k { font-size: 10.5px; color: var(--text-faint); letter-spacing: 0.03em; }
+
+/* Bar rows: choke points here, and the same shape works anywhere a share of a
+   whole needs a label, a track and a number. */
+.bar-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 6px 6px 7px;
+  margin: 0 -6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.bar-row:hover { background: var(--surface-2); }
+.bar-row.is-active { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--info); }
+.bar-row .name  { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-row .value { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.bar-row .track { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
+.bar-row .fill  { height: 100%; border-radius: 2px; background: var(--info); }
+
+.empty { color: var(--text-faint); font-size: 12.5px; font-style: italic; }
+
+/* ------------------------------------------------------------------ buttons */
+
+button {
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.btn {
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--text-dim);
+  padding: 6px 11px;
+}
+.btn:hover { background: var(--surface-3); color: var(--text); }
+.btn.is-on { background: var(--info-dim); border-color: var(--info); color: #cfe8ff; }
+.btn-primary {
+  background: var(--risk);
+  color: #fff;
+  font-weight: 600;
+  padding: 10px 14px;
+}
+.btn-primary:hover { background: #e64d4d; }
+.btn-primary:disabled { background: var(--surface-3); color: var(--text-faint); cursor: not-allowed; }
+
+/* -------------------------------------------------------------------- forms */
+
+label.field { display: block; }
+label.field > span {
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+input[type=text] {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 9px;
+}
+input[type=text]::placeholder { color: var(--text-faint); }
+input[type=text]:focus { outline: none; border-color: var(--info); box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.15); }
+input.mono { font-family: var(--mono); }
+
+/* ------------------------------------------------------------------- notice */
+
+.notice {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.notice.info    { border-color: var(--info-dim); background: #16273a; color: #bcd9f5; }
+.notice.error   { border-color: var(--risk-dim); background: #2e1a1e; color: #f5bcbc; }
+.notice.success { border-color: var(--good-dim); background: #162c24; color: #b7edcf; }
+
+/* ----------------------------------------------------------------- scrollbar */
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 5px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: #3a4270; }

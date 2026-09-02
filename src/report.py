@@ -24,19 +24,24 @@ import matplotlib.pyplot as plt
 
 from src.analysis import find_choke_points, top_attack_paths
 
-BG = "#1a1a2e"
-PANEL = "#22223f"
-FG = "#e8e8f0"
-MUTED = "#9aa0b5"
-ACCENT = "#ff6b6b"
-KEV_COLOR = "#ff6b6b"
-EPSS_COLOR = "#4dabf7"
+# These are the tokens from assets/app.css, so the static report and the two
+# browser views are recognisably one tool rather than three dark themes that
+# happen to share a hue. Red always means risk, blue always means likelihood.
+BG = "#0f1120"          # --bg
+PANEL = "#171b2f"       # --surface
+LINE = "#2c3355"        # --line
+FG = "#e9ebf5"          # --text
+MUTED = "#9aa2bd"       # --text-dim
+ACCENT = "#ff5d5d"      # --risk
+KEV_COLOR = "#ff5d5d"   # --risk
+EPSS_COLOR = "#4dabf7"  # --info
+BAR_MUTED = "#3f4675"   # the chains that are not the top one
 
 
 def _dark(ax):
     ax.set_facecolor(PANEL)
     for spine in ax.spines.values():
-        spine.set_color("#3a3a5c")
+        spine.set_color(LINE)
     ax.tick_params(colors=MUTED, labelsize=9)
     ax.xaxis.label.set_color(MUTED)
     ax.yaxis.label.set_color(MUTED)
@@ -68,7 +73,7 @@ def plot_severity_vs_likelihood(ax, G):
         if subset:
             ax.scatter([v.get("cvss", 0) for v in subset],
                        [v.get("p_exploit", 0) for v in subset],
-                       s=90, alpha=0.85, color=color, edgecolors="#12121f",
+                       s=90, alpha=0.85, color=color, edgecolors=BG,
                        linewidths=1.2, label=label, zorder=3)
 
     # Find CVEs that share a CVSS but diverge sharply in probability — the single
@@ -95,8 +100,8 @@ def plot_severity_vs_likelihood(ax, G):
                     xy=(cvss, (lo["p_exploit"] + hi["p_exploit"]) / 2),
                     xytext=(-14, 0), textcoords="offset points",
                     ha="right", va="center", fontsize=8.5, color=FG,
-                    bbox=dict(boxstyle="round,pad=0.45", facecolor="#2d2d52",
-                              edgecolor="#4a4a7a", alpha=0.95))
+                    bbox=dict(boxstyle="round,pad=0.45", facecolor=PANEL,
+                              edgecolor=LINE, alpha=0.95))
 
     ax.set_xlim(0, 10.5)
     ax.set_ylim(-0.05, 1.08)
@@ -118,33 +123,49 @@ def plot_top_chains(ax, G, policy, top=6):
         return
 
     chains = list(reversed(chains))
-    # Chain names go INSIDE the bar. As y-tick labels they were clipped by the
-    # axes margin, and abbreviating the middle to an ellipsis made distinct
-    # chains render as identical strings.
-    labels = [" → ".join(G.nodes[n]["hostname"] for n in c["path"]) for c in chains]
+    hops = [[G.nodes[n]["hostname"] for n in c["path"]] for c in chains]
     probs = [c["probability"] for c in chains]
 
-    colors = [ACCENT if i == len(chains) - 1 else "#5c5c8a" for i in range(len(chains))]
+    # Every chain starts at the same entry point, so repeating it six times costs
+    # horizontal room the differing part of the label needs. Say it once in the
+    # title instead. (Guarded: a policy with several entry points does not share
+    # a prefix, and then nothing is dropped.)
+    entry = hops[0][0] if len({h[0] for h in hops}) == 1 else None
+    labels = [" → ".join(h[1:] if entry else h) for h in hops]
+
+    colors = [ACCENT if i == len(chains) - 1 else BAR_MUTED for i in range(len(chains))]
     ax.barh(range(len(chains)), probs, color=colors, alpha=0.9, height=0.7)
     ax.set_yticks([])
 
+    # Chain names go INSIDE the bar. As y-tick labels they were clipped by the
+    # axes margin, and abbreviating the middle to an ellipsis made distinct
+    # chains render as identical strings.
+    #
+    # The probabilities sit in a fixed column past the longest possible bar
+    # rather than trailing each bar. Chained off the bar end they collided with
+    # the label of any chain long enough to fill its own bar — which is exactly
+    # the near-certain chains this panel most wants to be readable about.
+    value_x = 1.04
     for i, (label, p) in enumerate(zip(labels, probs)):
         inside = p > 0.35
         ax.text(0.012 if inside else p + 0.02, i, label,
                 va="center", ha="left", fontsize=8,
                 color="#ffffff" if inside else FG,
                 fontweight="bold" if i == len(chains) - 1 else "normal")
-        ax.text(min(p + 0.015, 1.02), i, f"{p:.3f}", va="center", fontsize=8.5, color=MUTED)
+        ax.text(value_x, i, f"{p:.3f}", va="center", ha="left", fontsize=8.5, color=MUTED)
 
     spread = max(probs) - min(probs)
     subtitle = ""
+    if entry:
+        subtitle = f"\nall starting from {entry}"
     if spread < 0.05:
         # Worth saying out loud: when every hop is a KEV entry, the chains are
         # all near-certain and the ranking between them carries no information.
-        subtitle = (f"\nall within {spread:.3f} — every hop here is KEV, "
-                    "so ranking them says little")
+        subtitle += (f"{',' if subtitle else chr(10)} all within {spread:.3f} — "
+                     "every hop here is KEV, so ranking them says little")
 
-    ax.set_xlim(0, 1.3)
+    ax.set_xlim(0, 1.22)
+    ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0])
     ax.set_xlabel("P(chain succeeds)  =  ∏ p over its edges")
     ax.set_title(f"Most probable attack chains (top {len(chains)}){subtitle}", fontsize=12, pad=10)
     _dark(ax)
@@ -163,7 +184,7 @@ def plot_choke_points(ax, G, policy, top=6):
     shares = [s for _n, s, _c, _t in chokes]
     counts = [(c, t) for _n, _s, c, t in chokes]
 
-    ax.barh(range(len(chokes)), shares, color="#4dabf7", alpha=0.9, height=0.62)
+    ax.barh(range(len(chokes)), shares, color=EPSS_COLOR, alpha=0.9, height=0.62)
     ax.set_yticks(range(len(chokes)))
     ax.set_yticklabels(names, fontsize=9, color=FG)
     for i, (c, t) in enumerate(counts):

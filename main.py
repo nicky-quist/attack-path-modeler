@@ -106,9 +106,11 @@ def plot(G, best, save=False, show=True, path="attack_path_graph.png"):
         matplotlib.use("Agg")  # render to file without needing a window
     import matplotlib.pyplot as plt
 
+    from src.report import BG
+
     fig, ax = plt.subplots(figsize=(16, 10))
-    fig.patch.set_facecolor("#1a1a2e")
-    ax.set_facecolor("#1a1a2e")
+    fig.patch.set_facecolor(BG)
+    ax.set_facecolor(BG)
     pos = nx.spring_layout(G, seed=42, k=2.5)
 
     # Colour by probability of exploitation rather than CVSS — the whole point
@@ -122,12 +124,12 @@ def plot(G, best, save=False, show=True, path="attack_path_graph.png"):
               for x in G.nodes}
     nx.draw_networkx_labels(G, pos, labels=labels, font_color="white",
                             font_size=8, font_weight="bold", ax=ax)
-    nx.draw_networkx_edges(G, pos, edge_color="#444466", arrows=True, arrowsize=10,
+    nx.draw_networkx_edges(G, pos, edge_color="#2c3355", arrows=True, arrowsize=10,
                            width=1, connectionstyle="arc3,rad=0.1", ax=ax)
 
     if best:
         path_edges = list(zip(best["path"], best["path"][1:]))
-        nx.draw_networkx_edges(G, pos, edgelist=path_edges, edge_color="red",
+        nx.draw_networkx_edges(G, pos, edgelist=path_edges, edge_color="#ff5d5d",
                                arrows=True, arrowsize=20, width=3,
                                connectionstyle="arc3,rad=0.1", ax=ax)
 

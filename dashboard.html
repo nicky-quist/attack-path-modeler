@@ -1,238 +1,636 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Attack Path Modeler</title>
-  <script src="https://d3js.org/d3.v7.min.js"></script>
-  <style>
-    body { background: #1a1a2e; margin: 0; font-family: Arial, sans-serif; color: white; }
-    h1 { text-align: center; padding: 20px 0 0; font-size: 22px; color: #e0e0e0; }
-    p  { text-align: center; color: #888; margin: 4px 0 10px; font-size: 13px; }
-    .node circle { stroke: #fff; stroke-width: 1.5px; cursor: pointer; }
-    .node text   { font-size: 11px; fill: white; pointer-events: none; }
-    .node .node-label {
-      font-size: 12px;
-      text-shadow: 0 1px 3px #000, 0 0 5px #000;
-    }
-    #tooltip {
-      position: absolute;
-      background: #2a2a4a;
-      border: 1px solid #555;
-      border-radius: 6px;
-      padding: 10px;
-      font-size: 12px;
-      pointer-events: none;
-      display: none;
-      max-width: 240px;
-      line-height: 1.6;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attack Path Modeler — Dashboard</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  /* Dashboard-specific layout. Shared tokens and components live in app.css. */
+  .main { display: grid; grid-template-columns: 340px 1fr; min-height: 0; }
+
+  .sidebar {
+    background: var(--bg);
+    border-right: 1px solid var(--line);
+    padding: 14px;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .canvas { position: relative; min-width: 0; overflow: hidden; }
+  .canvas svg { display: block; width: 100%; height: 100%; cursor: grab; }
+  .canvas svg.is-panning { cursor: grabbing; }
+
+  /* Controls float over the canvas rather than eating sidebar height, which is
+     needed for the panels that carry the actual findings. */
+  .controls {
+    position: absolute; top: 12px; right: 12px;
+    display: flex; gap: 6px;
+    background: rgba(15, 17, 32, 0.82);
+    backdrop-filter: blur(6px);
+    padding: 6px; border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .search-wrap { position: absolute; top: 12px; left: 12px; width: 210px; }
+  .search-wrap input { background: rgba(15, 17, 32, 0.86); backdrop-filter: blur(6px); }
+
+  /* Zone lanes: the segmentation policy, drawn. An attacker enters at the left
+     lane and has to cross a boundary for every lane to the right. */
+  .lane rect { fill: var(--surface); fill-opacity: 0.5; stroke: var(--line); stroke-dasharray: 3 5; }
+  .lane text {
+    fill: var(--text-faint); font-size: 11px; font-weight: 650;
+    letter-spacing: 0.14em; text-transform: uppercase; text-anchor: middle;
+  }
+
+  .edge { stroke: #59608c; stroke-opacity: 0.45; stroke-width: 1.1; fill: none; }
+  .edge.kev { stroke: #8a5a6e; stroke-opacity: 0.6; }
+  .risk-edge { stroke: var(--risk); stroke-width: 2.6; fill: none; filter: drop-shadow(0 0 4px rgba(255, 93, 93, 0.5)); }
+  .risk-edge.flow { stroke-dasharray: 7 6; animation: flow 1.1s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -13; } }
+
+  .node { cursor: pointer; }
+  .node circle.body { stroke: rgba(0, 0, 0, 0.45); stroke-width: 1; }
+  .node text {
+    font-size: 11.5px; fill: var(--text); pointer-events: none;
+    text-anchor: middle; paint-order: stroke;
+    stroke: var(--bg); stroke-width: 3.5px; stroke-linejoin: round;
+  }
+  /* One opacity knob drives hover-neighbourhood focus, search filtering and
+     selection, so they can never disagree about what is dimmed. */
+  .faded { opacity: 0.12; }
+  .node, .edge, .risk-edge { transition: opacity 0.15s; }
+
+  #tooltip {
+    position: absolute; pointer-events: none; display: none; z-index: 20;
+    max-width: 300px; padding: 10px 12px;
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: var(--radius-sm); box-shadow: var(--shadow);
+    font-size: 12px; line-height: 1.6;
+  }
+  #tooltip .t-title { font-weight: 650; font-size: 13px; }
+  #tooltip .t-sub { color: var(--text-faint); font-size: 11px; }
+  #tooltip ul { margin: 7px 0 0; padding: 0; list-style: none; }
+  #tooltip li { padding: 2px 0; border-top: 1px solid var(--line-soft); }
+
+  /* Chain hops */
+  .hop { display: grid; grid-template-columns: 14px 1fr; gap: 8px; cursor: pointer; }
+  .hop .rail { position: relative; }
+  .hop .rail::before { content: ""; position: absolute; left: 6px; top: 0; bottom: 0; width: 2px; background: var(--risk-dim); }
+  .hop:last-child .rail::before { bottom: 50%; }
+  .hop:first-child .rail::before { top: 50%; }
+  .hop .dot { position: absolute; left: 2px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--risk); }
+  .hop .body { padding-bottom: 10px; min-width: 0; }
+  .hop .host { font-size: 13px; font-weight: 600; }
+  .hop .via { font-size: 11.5px; color: var(--text-faint); font-family: var(--mono); }
+  .hop:last-child .body { padding-bottom: 0; }
+
+  .prob { display: flex; align-items: baseline; gap: 7px; margin-bottom: 12px; }
+  .prob .n { font-size: 27px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--risk); }
+  .prob .l { font-size: 11.5px; color: var(--text-faint); }
+
+  .legend-row { display: flex; align-items: center; gap: 9px; margin-top: 8px; font-size: 12px; color: var(--text-dim); }
+  .legend-row svg { flex: none; }
+  .ramp { height: 8px; border-radius: 4px; margin: 2px 0 5px; }
+  .ramp-labels { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-faint); }
+
+  .vuln { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border-top: 1px solid var(--line-soft); font-size: 12px; }
+  .vuln .cve { font-family: var(--mono); font-size: 11.5px; }
+  .vuln .p { color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  #fallback {
+    position: absolute; inset: 0; display: none;
+    align-items: center; justify-content: center; padding: 30px;
+  }
+  #fallback .notice { max-width: 460px; }
+
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+    .sidebar { border-right: none; border-top: 1px solid var(--line); max-height: 45vh; }
+    .canvas { order: -1; }
+  }
+</style>
 </head>
 <body>
-  <h1>Attack Path Graph</h1>
-  <p id="source-label">Hover over nodes and edges for details &nbsp;|&nbsp; Drag nodes to rearrange</p>
-  <p style="text-align:center; margin-top:-4px;"><a href="builder.html" style="color:#7ec4ff; font-size:12px;">+ Build a new graph from known CVEs</a></p>
-  <div id="tooltip"></div>
-  <svg id="graph"></svg>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <h1>Attack Path Modeler</h1>
+      <span class="tag" id="source-label">loading&hellip;</span>
+    </div>
+    <div class="spacer"></div>
+    <nav>
+      <a href="builder.html">Build from known CVEs &rarr;</a>
+    </nav>
+  </header>
+
+  <div class="main">
+    <aside class="sidebar">
+
+      <div class="card">
+        <h2>Estate</h2>
+        <div class="metrics" id="metrics"></div>
+      </div>
+
+      <div class="card">
+        <h2>Most probable chain</h2>
+        <div id="chain"></div>
+      </div>
+
+      <div class="card">
+        <h2>Choke points <span class="count">share of top chains</span></h2>
+        <div id="chokes"></div>
+      </div>
+
+      <div class="card" id="detail-card" style="display:none">
+        <h2>Selected host</h2>
+        <div id="detail"></div>
+      </div>
+
+      <div class="card">
+        <h2>Legend</h2>
+        <div class="ramp" id="ramp"></div>
+        <div class="ramp-labels"><span>P(exploit) 0</span><span>1</span></div>
+        <div class="legend-row">
+          <svg width="34" height="20"><circle cx="9" cy="10" r="5" fill="#4a6a8f"></circle><circle cx="25" cy="10" r="9" fill="#ff4d4d"></circle></svg>
+          size and colour = P(exploit), not CVSS
+        </div>
+        <div class="legend-row">
+          <svg width="34" height="20"><circle cx="17" cy="10" r="7" fill="#7a4a5a" stroke="#ff5d5d" stroke-width="2"></circle></svg>
+          red outline = CVE on the CISA KEV list
+        </div>
+        <div class="legend-row">
+          <svg width="34" height="20"><circle cx="17" cy="10" r="6" fill="#5c5c8a"></circle><circle cx="17" cy="10" r="10" fill="none" stroke="#ffd166" stroke-width="1.6"></circle></svg>
+          amber halo = crown-jewel asset
+        </div>
+        <div class="legend-row">
+          <svg width="34" height="20"><line x1="2" y1="10" x2="32" y2="10" stroke="#ff5d5d" stroke-width="2.6"></line></svg>
+          the most probable chain to a crown jewel
+        </div>
+      </div>
+
+    </aside>
+
+    <div class="canvas" id="canvas">
+      <div class="search-wrap">
+        <input type="text" id="search" placeholder="Filter hosts&hellip;" autocomplete="off">
+      </div>
+      <div class="controls">
+        <button class="btn is-on" id="toggle-labels" title="Show or hide hostname labels">Labels</button>
+        <button class="btn" id="toggle-focus" title="Dim everything that is not on the most probable chain">Chain only</button>
+        <button class="btn" id="fit" title="Fit the whole graph in view">Fit</button>
+      </div>
+      <svg id="graph"></svg>
+      <div id="fallback"></div>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
 
 <script>
-const width  = window.innerWidth;
-const height = window.innerHeight - 80;
+// ---------------------------------------------------------------- utilities
 
-const svg = d3.select("#graph")
-  .attr("width", width)
-  .attr("height", height);
+// Hostnames, CVE IDs, services and ports all trace back to something a person
+// typed into builder.html or a known_hosts spec, so they are untrusted input
+// and must never reach .innerHTML raw.
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-svg.append("defs").append("marker")
-  .attr("id", "arrow")
-  .attr("viewBox", "0 -5 10 10")
-  .attr("refX", 10).attr("refY", 0)
-  .attr("markerWidth", 3.5).attr("markerHeight", 3.5)
-  .attr("orient", "auto")
-  .append("path")
-  .attr("d", "M0,-5L10,0L0,5")
-  .attr("fill", "#aaa");
+const idOf = v => (v && typeof v === "object") ? v.id : v;
+const radius = d => 9 + (d.max_p_exploit ?? 0) * 14;
 
-svg.append("defs").append("marker")
-  .attr("id", "arrow-red")
-  .attr("viewBox", "0 -5 10 10")
-  .attr("refX", 10).attr("refY", 0)
-  .attr("markerWidth", 3.5).attr("markerHeight", 3.5)
-  .attr("orient", "auto")
-  .append("path")
-  .attr("d", "M0,-5L10,0L0,5")
-  .attr("fill", "red");
+// Cool where exploitation is unlikely, hot where it is near-certain. Deliberately
+// not d3's RdYlGn: green reads as "safe, handled" on a dark ground, and a host at
+// p=0.2 is not handled, just less urgent.
+const riskScale = d3.scaleSequential(d3.interpolateRgbBasis(
+  ["#4a6a8f", "#4c8f8a", "#c8a13e", "#e8613c", "#ff4d4d"])).domain([0, 1]).clamp(true);
 
-const color = d3.scaleSequential()
-  .domain([0, 10])
-  .interpolator(d3.interpolateRdYlGn)
-  .clamp(true);
-
-// Colour by probability of exploitation, not severity: the whole point of the
-// EPSS/KEV work is that these rank hosts differently.
-const riskColor = p => color(10 - (p || 0) * 10);
 const tooltip = d3.select("#tooltip");
+function showTip(html, event) {
+  tooltip.style("display", "block").html(html);
+  moveTip(event);
+}
+function moveTip(event) {
+  const box = tooltip.node().getBoundingClientRect();
+  const x = Math.min(event.pageX + 14, window.innerWidth - box.width - 10);
+  const y = Math.max(10, Math.min(event.pageY - 20, window.innerHeight - box.height - 10));
+  tooltip.style("left", x + "px").style("top", y + "px");
+}
+const hideTip = () => tooltip.style("display", "none");
 
-// Escape untrusted strings before they go into tooltip .html() — hostnames, CVE IDs,
-// services and ports here all ultimately trace back to what someone typed into
-// builder.html or a known_hosts.json spec, so they can't be trusted as raw HTML.
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
+d3.select("#ramp").style("background",
+  "linear-gradient(to right, " + d3.range(0, 1.01, 0.1).map(riskScale).join(",") + ")");
+
+// -------------------------------------------------------------------- render
+
+d3.json("data/graph.json")
+  .then(data => (data && data.nodes && data.nodes.length) ? render(data) : fallback(
+    "<b>data/graph.json has no hosts in it.</b><br>Run <code>python main.py</code> to rebuild it, " +
+    "or add hosts on the <a href='builder.html'>builder page</a>."))
+  .catch(() => fallback(
+    "<b>Could not load data/graph.json.</b><br>This page has to be served over HTTP — browsers " +
+    "block a local file from reading another local file. Start it with:<br><br>" +
+    "<code>python main.py --serve</code>"));
+
+function fallback(html) {
+  d3.select("#source-label").text("no data");
+  d3.select("#fallback").style("display", "flex")
+    .html('<div class="notice error">' + html + "</div>");
 }
 
-d3.json("data/graph.json").then(data => {
+function render(data) {
+  const canvas = document.getElementById("canvas");
+  const svg = d3.select("#graph");
+  const nodeById = new Map(data.nodes.map(n => [n.id, n]));
+  const riskPath = (data.riskPath || []).filter(id => nodeById.has(id));
 
-  // Highest-risk path is computed server-side (src/analysis.py) and shipped
-  // in the export — not hardcoded, so this works for any topology, not just
-  // the original demo dataset.
-  const riskNodeIds = data.riskPath || [];
-  const riskLayer = svg.append("g").attr("id", "risk-path");
+  // ---- header + summary ---------------------------------------------------
 
-  // Pairs of nodes the red risk-path line already covers — skip the plain gray
-  // line for these (in *either* direction) so a connection doesn't render
-  // twice. A bidirectional pair (e.g. two hosts both marked as gateways) has
-  // separate forward/reverse edges in the data, so this needs to be treated
-  // as undirected or the reverse-direction gray line would still show up
-  // right alongside the red one.
-  const riskEdgeKeys = new Set();
-  for (let i = 0; i < riskNodeIds.length - 1; i++) {
-    riskEdgeKeys.add(`${riskNodeIds[i]}->${riskNodeIds[i + 1]}`);
-    riskEdgeKeys.add(`${riskNodeIds[i + 1]}->${riskNodeIds[i]}`);
+  const when = data.generatedAt ? new Date(data.generatedAt).toLocaleString() : "";
+  d3.select("#source-label").text(
+    (data.sourceLabel || "unlabelled dataset") + (when ? "  ·  generated " + when : ""));
+
+  const zones = [...new Set(data.nodes.map(d => d.zone || "unzoned"))];
+  const metrics = [
+    ["hosts", data.nodes.length],
+    ["edges", data.links.length],
+    ["zones", zones.length],
+    ["on KEV", data.nodes.filter(d => d.in_kev).length],
+  ];
+  d3.select("#metrics").selectAll("div").data(metrics).join("div")
+    .attr("class", "metric")
+    .html(m => '<div class="v">' + m[1] + '</div><div class="k">' + m[0] + "</div>");
+
+  // ---- most probable chain ------------------------------------------------
+
+  const edgeBetween = new Map(data.links.map(l => [idOf(l.source) + ">" + idOf(l.target), l]));
+  const chainEl = d3.select("#chain");
+  if (riskPath.length < 2) {
+    chainEl.html('<div class="empty">No chain reaches a crown jewel under this policy.</div>');
+  } else {
+    const p = data.riskPathProbability;
+    const header = p == null ? "" :
+      '<div class="prob"><span class="n">' + (p * 100).toFixed(1) + '%</span>' +
+      '<span class="l">end-to-end success<br>= &prod; p over ' + (riskPath.length - 1) + " hops</span></div>";
+
+    chainEl.html(header + riskPath.map((id, i) => {
+      const host = nodeById.get(id);
+      const link = i > 0 ? edgeBetween.get(riskPath[i - 1] + ">" + id) : null;
+      const via = link
+        ? esc(link.cve) + " · " + esc(link.service) + "/" + esc(link.port) +
+          " · p=" + (link.p_exploit ?? 0).toFixed(3)
+        : "entry point";
+      return '<div class="hop" data-id="' + esc(id) + '">' +
+               '<div class="rail"><div class="dot"></div></div>' +
+               '<div class="body">' +
+                 '<div class="host">' + esc(host.hostname) +
+                   (link && link.in_kev ? ' <span class="badge kev">KEV</span>' : "") +
+                   (host.is_crown_jewel ? ' <span class="badge jewel">CROWN JEWEL</span>' : "") +
+                 "</div>" +
+                 '<div class="via">' + via + "</div>" +
+               "</div></div>";
+    }).join(""));
+
+    chainEl.selectAll(".hop").on("click", function () { select(this.dataset.id); });
   }
-  const idOf = v => (v && typeof v === "object") ? v.id : v;
 
-  if (data.sourceLabel) {
-    const when = data.generatedAt ? new Date(data.generatedAt).toLocaleString() : "";
-    d3.select("#source-label")
-      .text(`Source: ${data.sourceLabel}${when ? "  ·  generated " + when : ""}`);
+  // ---- choke points -------------------------------------------------------
+
+  const chokes = (data.chokePoints || []).filter(c => c.share > 0 && nodeById.has(c.id));
+  const chokeEl = d3.select("#chokes");
+  if (!chokes.length) {
+    chokeEl.html('<div class="empty">No host sits on a shared route — nothing to contain.</div>');
+  } else {
+    chokeEl.selectAll("div.bar-row").data(chokes).join("div")
+      .attr("class", "bar-row")
+      .attr("data-id", d => d.id)
+      .html(d =>
+        '<div class="name">' + esc(nodeById.get(d.id).hostname) + "</div>" +
+        '<div class="value">' + (d.share * 100).toFixed(0) + "%</div>" +
+        '<div class="track"><div class="fill" style="width:' + (d.share * 100).toFixed(1) + '%"></div></div>')
+      .on("click", (ev, d) => select(d.id));
   }
 
-  const simulation = d3.forceSimulation(data.nodes)
-    .force("link", d3.forceLink(data.links).id(d => d.id).distance(220))
-    .force("charge", d3.forceManyBody().strength(-1200))
-    .force("center", d3.forceCenter(width / 2, height / 2))
-    .force("x", d3.forceX(width / 2).strength(0.03))
-    .force("y", d3.forceY(height / 2).strength(0.03));
+  // ---- zone lanes ---------------------------------------------------------
 
-  const link = svg.append("g").selectAll("line")
-    .data(data.links.filter(d => !riskEdgeKeys.has(`${idOf(d.source)}->${idOf(d.target)}`)))
-    .join("line")
-    .attr("stroke", "#aaaaaa")
-    .attr("stroke-width", 1)
-    .attr("stroke-opacity", 0.4)
-    .attr("marker-end", "url(#arrow)")
-    .on("mouseover", (event, d) => {
-      const src = typeof d.source === "object" ? d.source.id : d.source;
-      const tgt = typeof d.target === "object" ? d.target.id : d.target;
-      tooltip.style("display", "block")
-        .html(`<b>${escapeHtml(src)} → ${escapeHtml(tgt)}</b><br>
-               CVE: ${escapeHtml(d.cve)}<br>
-               Service: ${escapeHtml(d.service)}:${escapeHtml(d.port)}<br>
-               Weight: ${escapeHtml(d.weight)}`);
-    })
-    .on("mousemove", event => {
-      tooltip.style("left", (event.pageX + 12) + "px")
-             .style("top",  (event.pageY - 28) + "px");
-    })
-    .on("mouseout", () => tooltip.style("display", "none"));
+  // Lane order is attacker depth, not alphabet: BFS from the hosts nothing can
+  // reach (the internet-facing ones), so the left-to-right axis reads as "how
+  // many segmentation boundaries in". That makes the policy visible; otherwise
+  // it stays buried in a JSON file nobody opens.
+  const laneOrder = (() => {
+    const adj = new Map(data.nodes.map(d => [d.id, []]));
+    const indeg = new Map(data.nodes.map(d => [d.id, 0]));
+    for (const l of data.links) {
+      const s = idOf(l.source), t = idOf(l.target);
+      if (adj.has(s)) adj.get(s).push(t);
+      indeg.set(t, (indeg.get(t) || 0) + 1);
+    }
+    let seeds = data.nodes.filter(d => !indeg.get(d.id)).map(d => d.id);
+    if (!seeds.length) seeds = [riskPath[0] ?? data.nodes[0].id];
 
-  const node = svg.append("g").selectAll("g")
-    .data(data.nodes)
-    .join("g")
+    const dist = new Map(seeds.map(s => [s, 0]));
+    const queue = [...seeds];
+    while (queue.length) {
+      const cur = queue.shift();
+      for (const nb of adj.get(cur) || []) {
+        if (!dist.has(nb)) { dist.set(nb, dist.get(cur) + 1); queue.push(nb); }
+      }
+    }
+    const depth = new Map();
+    for (const d of data.nodes) {
+      const z = d.zone || "unzoned";
+      const v = dist.has(d.id) ? dist.get(d.id) : 1e6;
+      if (!depth.has(z) || v < depth.get(z)) depth.set(z, v);
+    }
+    return [...depth.keys()].sort((a, b) => depth.get(a) - depth.get(b) || a.localeCompare(b));
+  })();
+
+  const laneIndex = new Map(laneOrder.map((z, i) => [z, i]));
+  const zoneOf = d => d.zone || "unzoned";
+
+  const LANE_W = Math.max(240, Math.min(360, 1100 / laneOrder.length));
+  const PAD = 34;                                    // keeps circles off the lane edge
+  const H = Math.max(520, 92 * Math.ceil(data.nodes.length / Math.max(1, laneOrder.length)) + 180);
+  const laneX = z => (laneIndex.get(z) + 0.5) * LANE_W;
+
+  // ---- scene graph --------------------------------------------------------
+
+  const defs = svg.append("defs");
+  [["arrow", "#59608c"], ["arrow-kev", "#8a5a6e"], ["arrow-risk", "#ff5d5d"]].forEach(m => {
+    defs.append("marker")
+      .attr("id", m[0]).attr("viewBox", "0 -5 10 10")
+      .attr("refX", 9).attr("refY", 0)
+      .attr("markerWidth", 4).attr("markerHeight", 4).attr("orient", "auto")
+      .append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", m[1]);
+  });
+
+  const root = svg.append("g");
+  const laneLayer = root.append("g");
+  const edgeLayer = root.append("g");
+  const riskLayer = root.append("g");
+  const nodeLayer = root.append("g");
+
+  const lanes = laneLayer.selectAll("g").data(laneOrder).join("g").attr("class", "lane");
+  lanes.append("rect").attr("rx", 14)
+    .attr("x", z => laneIndex.get(z) * LANE_W + 8).attr("width", LANE_W - 16);
+  lanes.append("text").attr("x", z => laneX(z)).text(z => z);
+
+  // Edges the red chain already draws are skipped in either direction, so a
+  // bidirectional pair does not render a grey line alongside the red one.
+  const riskKeys = new Set();
+  for (let i = 0; i < riskPath.length - 1; i++) {
+    riskKeys.add(riskPath[i] + ">" + riskPath[i + 1]);
+    riskKeys.add(riskPath[i + 1] + ">" + riskPath[i]);
+  }
+
+  const edges = edgeLayer.selectAll("path")
+    .data(data.links.filter(l => !riskKeys.has(idOf(l.source) + ">" + idOf(l.target))))
+    .join("path")
+    .attr("class", d => d.in_kev ? "edge kev" : "edge")
+    .attr("marker-end", d => d.in_kev ? "url(#arrow-kev)" : "url(#arrow)")
+    .on("mouseover", (ev, d) => showTip(
+      '<div class="t-title">' + esc(nodeById.get(idOf(d.source)).hostname) + " &rarr; " +
+        esc(nodeById.get(idOf(d.target)).hostname) + "</div>" +
+      '<div class="t-sub">' + esc(d.service) + "/" + esc(d.port) + " · " + esc(d.cve) +
+        (d.in_kev ? ' <span class="badge kev">KEV</span>' : "") + "</div>" +
+      "<ul><li>P(exploit) <b>" + (d.p_exploit ?? 0).toFixed(3) + "</b> " +
+        '<span class="t-sub">(' + esc(d.p_source || "n/a") + ")</span></li>" +
+      "<li>edge cost &minus;log p = <b>" + esc(d.weight) + "</b></li></ul>", ev))
+    .on("mousemove", moveTip).on("mouseout", hideTip);
+
+  const riskSegs = riskLayer.selectAll("path")
+    .data(riskPath.slice(1).map((id, i) => ({
+      source: nodeById.get(riskPath[i]), target: nodeById.get(id),
+    })))
+    .join("path").attr("class", "risk-edge flow").attr("marker-end", "url(#arrow-risk)");
+
+  const nodes = nodeLayer.selectAll("g").data(data.nodes).join("g")
     .attr("class", "node")
     .call(d3.drag()
-      .on("start", (event, d) => {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x; d.fy = d.y;
-      })
-      .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
-      .on("end", (event, d) => {
-        if (!event.active) simulation.alphaTarget(0);
-        d.fx = null; d.fy = null;
-      }))
-    .on("mouseover", (event, d) => {
-      const vulns = d.vulns
-        ? d.vulns.map(v =>
-            `<br>• ${escapeHtml(v.cve)} — CVSS ${escapeHtml(v.cvss)}, p=${escapeHtml((v.p_exploit ?? 0).toFixed(3))}`
-            + `${v.in_kev ? ' <span style="color:#ff6b6b">[KEV]</span>' : ""}`
-            + ` — ${escapeHtml(v.service)}:${escapeHtml(v.port)}`
-          ).join("")
-        : "";
-      const kev = d.in_kev ? ' <span style="color:#ff6b6b">[KEV]</span>' : "";
-      const zone = d.zone ? `<br>Zone: ${escapeHtml(d.zone)}` : "";
-      const jewel = d.is_crown_jewel ? '<br><b style="color:#ffd166">crown jewel</b>' : "";
-      tooltip.style("display", "block")
-        .html(`<b>${escapeHtml(d.hostname)}</b> (${escapeHtml(d.id)})${kev}${jewel}${zone}<br>
-               P(exploit): ${escapeHtml((d.max_p_exploit ?? 0).toFixed(3))}
-               &nbsp;·&nbsp; Max CVSS: ${escapeHtml(d.max_cvss)}${vulns}`);
-    })
-    .on("mousemove", event => {
-      tooltip.style("left", (event.pageX + 12) + "px")
-             .style("top",  (event.pageY - 28) + "px");
-    })
-    .on("mouseout", () => tooltip.style("display", "none"));
+      .on("start", (ev, d) => { if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on("drag", (ev, d) => { d.fx = clampX(ev.x, d); d.fy = ev.y; })
+      .on("end", (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }))
+    .on("click", (ev, d) => { ev.stopPropagation(); select(d.id === selectedId ? null : d.id); })
+    .on("mouseover", (ev, d) => { hover(d.id); showTip(nodeTip(d), ev); })
+    .on("mousemove", moveTip)
+    .on("mouseout", () => { hover(null); hideTip(); });
 
-  node.append("circle")
-    .attr("r", d => 10 + (d.max_p_exploit ?? 0) * 20)
-    .attr("fill", d => riskColor(d.max_p_exploit))
-    .attr("stroke", d => d.in_kev ? "#ff6b6b" : "none")
-    .attr("stroke-width", d => d.in_kev ? 3 : 0);
+  nodes.filter(d => d.is_crown_jewel).append("circle")
+    .attr("r", d => radius(d) + 5).attr("fill", "none")
+    .attr("stroke", "#ffd166").attr("stroke-width", 1.6).attr("stroke-opacity", 0.85);
 
-  // Label below the circle at one fixed, comfortable size for every node —
-  // cramming text inside the circle meant shrinking it to the point of being
-  // unreadable on small (low-CVSS) nodes. A light truncation cap still
-  // applies for extreme outliers so one long hostname can't visually run
-  // into neighboring nodes; the tooltip always shows the full name.
-  node.append("text")
-    .attr("class", "node-label")
-    .attr("text-anchor", "middle")
-    .attr("y", d => 10 + (d.max_p_exploit ?? 0) * 20 + 16)
-    .text(d => d.hostname.length > 24 ? d.hostname.slice(0, 23) + "…" : d.hostname);
+  nodes.append("circle").attr("class", "body")
+    .attr("r", radius)
+    .attr("fill", d => riskScale(d.max_p_exploit ?? 0))
+    .attr("stroke", d => d.in_kev ? "#ff5d5d" : "rgba(0,0,0,0.45)")
+    .attr("stroke-width", d => d.in_kev ? 2.2 : 1);
 
-  simulation.on("tick", () => {
-    link
-      .attr("x1", d => d.source.x)
-      .attr("y1", d => d.source.y)
-      .attr("x2", d => {
-        const dx = d.target.x - d.source.x;
-        const dy = d.target.y - d.source.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const r = 10 + (d.target.max_p_exploit ?? 0) * 20;
-        return d.target.x - (dx / dist) * (r + 4);
-      })
-      .attr("y2", d => {
-        const dx = d.target.x - d.source.x;
-        const dy = d.target.y - d.source.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const r = 10 + (d.target.max_p_exploit ?? 0) * 20;
-        return d.target.y - (dy / dist) * (r + 4);
-      });
+  const labels = nodes.append("text")
+    .attr("y", d => radius(d) + 15)
+    .text(d => d.hostname.length > 22 ? d.hostname.slice(0, 21) + "…" : d.hostname);
 
-    node.attr("transform", d => `translate(${d.x},${d.y})`);
+  function nodeTip(d) {
+    const vulns = (d.vulns || []).map(v =>
+      '<li><span class="mono">' + esc(v.cve) + "</span> — CVSS " + esc(v.cvss) +
+      ", p=" + (v.p_exploit ?? 0).toFixed(3) +
+      (v.in_kev ? ' <span class="badge kev">KEV</span>' : "") + "<br>" +
+      '<span class="t-sub">' + esc(v.service) + "/" + esc(v.port) + "</span></li>").join("");
+    return '<div class="t-title">' + esc(d.hostname) +
+             (d.in_kev ? ' <span class="badge kev">KEV</span>' : "") +
+             (d.is_crown_jewel ? ' <span class="badge jewel">CROWN JEWEL</span>' : "") + "</div>" +
+           '<div class="t-sub mono">' + esc(d.id) + " · " + esc(zoneOf(d)) + "</div>" +
+           "<ul><li>P(exploit) <b>" + (d.max_p_exploit ?? 0).toFixed(3) + "</b>" +
+             " &nbsp;·&nbsp; max CVSS " + esc(d.max_cvss) + "</li>" + vulns + "</ul>";
+  }
 
-    // Redraw red path on every tick
-    const nodeById = Object.fromEntries(data.nodes.map(n => [n.id, n]));
-    riskLayer.selectAll("line").remove();
-    riskNodeIds.slice(0, -1).forEach((id, i) => {
-      const s = nodeById[id];
-      const t = nodeById[riskNodeIds[i + 1]];
-      if (!s || !t) return;  // guard against a stale/hand-edited riskPath referencing a missing node
-      const dx = t.x - s.x;
-      const dy = t.y - s.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const r = 10 + (t.max_p_exploit ?? 0) * 20;
-      riskLayer.append("line")
-        .attr("x1", s.x).attr("y1", s.y)
-        .attr("x2", t.x - (dx / dist) * (r + 4))
-        .attr("y2", t.y - (dy / dist) * (r + 4))
-        .attr("stroke", "red")
-        .attr("stroke-width", 3)
-        .attr("marker-end", "url(#arrow-red)");
+  // ---- simulation ---------------------------------------------------------
+
+  // x is clamped to the host's zone lane rather than merely nudged, so the
+  // left-to-right reading ("one lane right = one boundary crossed") always
+  // holds. A stray node drifting into the neighbouring lane would make the
+  // whole layout lie about the policy.
+  function clampX(x, d) {
+    const c = laneX(zoneOf(d));
+    const half = Math.max(10, LANE_W / 2 - PAD - radius(d));
+    return Math.max(c - half, Math.min(c + half, x));
+  }
+
+  const sim = d3.forceSimulation(data.nodes)
+    .force("link", d3.forceLink(data.links).id(d => d.id).distance(110).strength(0.12))
+    .force("charge", d3.forceManyBody().strength(-560))
+    // The collision radius has to clear the label under the circle, not just the
+    // circle, or hostnames in a crowded lane overlap each other.
+    .force("collide", d3.forceCollide(d => radius(d) + 32))
+    .force("x", d3.forceX(d => laneX(zoneOf(d))).strength(0.6))
+    .force("y", d3.forceY(H / 2).strength(0.06))
+    .on("tick", tick);
+
+  function arc(s, t) {
+    const dx = t.x - s.x, dy = t.y - s.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const x1 = s.x + dx / dist * (radius(s) + 2), y1 = s.y + dy / dist * (radius(s) + 2);
+    const x2 = t.x - dx / dist * (radius(t) + 6), y2 = t.y - dy / dist * (radius(t) + 6);
+    // A gentle arc, so the two directions of a bidirectional pair stay visible
+    // as two lines instead of overprinting each other.
+    return "M" + x1 + "," + y1 + "A" + dist * 1.9 + "," + dist * 1.9 + " 0 0,1 " + x2 + "," + y2;
+  }
+
+  function tick() {
+    for (const d of data.nodes) d.x = clampX(d.x, d);
+    edges.attr("d", d => arc(d.source, d.target));
+    riskSegs.attr("d", d => arc(d.source, d.target));
+    nodes.attr("transform", d => "translate(" + d.x + "," + d.y + ")");
+
+    const ys = data.nodes.map(d => d.y);
+    const top = Math.min(...ys) - 56, bottom = Math.max(...ys) + 44;
+    lanes.select("rect").attr("y", top - 12).attr("height", bottom - top + 12);
+    lanes.select("text").attr("y", top + 4);
+  }
+
+  // ---- zoom, fit, resize --------------------------------------------------
+
+  const zoom = d3.zoom().scaleExtent([0.2, 4]).on("zoom", ev => root.attr("transform", ev.transform));
+  svg.call(zoom)
+    .on("click", () => select(null))
+    .on("mousedown.cursor", () => svg.classed("is-panning", true))
+    .on("mouseup.cursor", () => svg.classed("is-panning", false));
+
+  // Measured from what is actually on screen rather than from the lane maths:
+  // labels overhang their nodes by an amount that depends on the hostname, so a
+  // bounds calculation from node positions alone clips the outermost lane.
+  // getBBox() reports the group's contents before its own zoom transform, which
+  // is exactly the layout-space box needed here.
+  let fitRetries = 0;
+
+  function fit() {
+    const box = canvas.getBoundingClientRect();
+    const w = canvas.clientWidth || box.width;
+    const h = canvas.clientHeight || box.height;
+    const b = data.nodes.length ? root.node().getBBox() : null;
+
+    // A background or freshly-opened tab can report a zero-height canvas for
+    // several hundred milliseconds. Bailing out silently there left the graph
+    // parked at identity zoom with the rightmost zone off-screen, so retry
+    // instead of giving up on the one measurement that happened to be early.
+    if (!w || !h || !b || !b.width || !b.height) {
+      if (fitRetries++ < 25) setTimeout(fit, 200);
+      return;
+    }
+    fitRetries = 0;
+
+    // Applied instantly rather than as a transition: a tweened fit depends on
+    // requestAnimationFrame, and a tab that is throttled or not being composited
+    // never advances it — which leaves the graph parked at identity zoom with
+    // the rightmost zone off-screen. Snapping is also the right feel for a fit.
+    const k = Math.min(w / (b.width + 60), h / (b.height + 60), 1.4);
+    svg.call(zoom.transform, d3.zoomIdentity
+      .translate(w / 2, h / 2).scale(k)
+      .translate(-(b.x + b.width / 2), -(b.y + b.height / 2)));
+  }
+
+  let fitTimer = null;
+  const fitSoon = () => { clearTimeout(fitTimer); fitTimer = setTimeout(fit, 120); };
+
+  sim.on("end", fit);
+  setTimeout(fit, 700);   // the simulation can run long; do not make the user wait to see anything
+  new ResizeObserver(fitSoon).observe(canvas);
+  d3.select("#fit").on("click", fit);
+
+  // ---- focus: hover, selection, search, chain-only ------------------------
+
+  const neighbours = new Map(data.nodes.map(d => [d.id, new Set([d.id])]));
+  for (const l of data.links) {
+    const s = idOf(l.source), t = idOf(l.target);
+    if (neighbours.has(s)) neighbours.get(s).add(t);
+    if (neighbours.has(t)) neighbours.get(t).add(s);
+  }
+
+  let hoveredId = null, selectedId = null, query = "", chainOnly = false;
+  const chainSet = new Set(riskPath);
+
+  function visible(id) {
+    if (chainOnly && !chainSet.has(id)) return false;
+    const host = nodeById.get(id);
+    if (query && !(host.hostname.toLowerCase().includes(query) || id.toLowerCase().includes(query))) {
+      return false;
+    }
+    const focus = hoveredId || selectedId;
+    if (focus && !neighbours.get(focus).has(id)) return false;
+    return true;
+  }
+
+  function applyFocus() {
+    nodes.classed("faded", d => !visible(d.id));
+    edges.classed("faded", d => !visible(idOf(d.source)) || !visible(idOf(d.target)));
+    riskSegs.classed("faded", d => !visible(d.source.id) || !visible(d.target.id));
+    d3.selectAll(".bar-row").classed("is-active", function () {
+      return this.dataset.id === selectedId;
     });
+  }
+  const hover = id => { hoveredId = id; applyFocus(); };
+
+  function select(id) {
+    selectedId = id;
+    applyFocus();
+    const card = d3.select("#detail-card");
+    if (!id) { card.style("display", "none"); return; }
+
+    const d = nodeById.get(id);
+    const outs = data.links.filter(l => idOf(l.source) === id).length;
+    const ins = data.links.filter(l => idOf(l.target) === id).length;
+    const vulns = (d.vulns || []).length
+      ? d.vulns.map(v =>
+          '<div class="vuln"><span><span class="cve">' + esc(v.cve) + "</span> " +
+          '<span style="color:var(--text-faint)">' + esc(v.service) + "/" + esc(v.port) + "</span>" +
+          (v.in_kev ? ' <span class="badge kev">KEV</span>' : "") + "</span>" +
+          '<span class="p">CVSS ' + esc(v.cvss) + " · p=" + (v.p_exploit ?? 0).toFixed(3) +
+          "</span></div>").join("")
+      : '<div class="empty">No CVEs recorded on this host.</div>';
+
+    card.style("display", "block");
+    d3.select("#detail").html(
+      '<div style="font-size:16px;font-weight:600;margin-bottom:2px">' + esc(d.hostname) + "</div>" +
+      '<div class="mono" style="color:var(--text-faint);font-size:12px;margin-bottom:9px">' + esc(d.id) + "</div>" +
+      '<div style="margin-bottom:10px">' +
+        '<span class="badge zone">' + esc(zoneOf(d)) + "</span> " +
+        (d.in_kev ? '<span class="badge kev">KEV</span> ' : "") +
+        (d.is_crown_jewel ? '<span class="badge jewel">CROWN JEWEL</span>' : "") +
+      "</div>" +
+      '<div class="metrics">' +
+        '<div class="metric"><div class="v">' + (d.max_p_exploit ?? 0).toFixed(2) + '</div><div class="k">P(exploit)</div></div>' +
+        '<div class="metric"><div class="v">' + esc(d.max_cvss) + '</div><div class="k">max CVSS</div></div>' +
+        '<div class="metric"><div class="v">' + ins + '</div><div class="k">ways in</div></div>' +
+        '<div class="metric"><div class="v">' + outs + '</div><div class="k">ways onward</div></div>' +
+      "</div>" +
+      '<div style="margin-top:11px">' + vulns + "</div>");
+  }
+
+  d3.select("#search").on("input", function () {
+    query = this.value.trim().toLowerCase();
+    applyFocus();
   });
-});
+  d3.select("#toggle-focus").on("click", function () {
+    chainOnly = !chainOnly;
+    d3.select(this).classed("is-on", chainOnly);
+    applyFocus();
+  });
+  d3.select("#toggle-labels").on("click", function () {
+    const on = !d3.select(this).classed("is-on");
+    d3.select(this).classed("is-on", on);
+    labels.style("display", on ? null : "none");
+  });
+  d3.select("body").on("keydown", ev => {
+    if (ev.key === "Escape") {
+      select(null);
+      d3.select("#search").property("value", "");
+      query = "";
+      applyFocus();
+    }
+  });
+
+  applyFocus();
+}
 </script>
 </body>
 </html>

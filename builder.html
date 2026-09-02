@@ -1,183 +1,195 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Attack Path Modeler — Build From CVEs</title>
-  <style>
-    body { background: #1a1a2e; margin: 0; font-family: Arial, sans-serif; color: white; }
-    .wrap { max-width: 780px; margin: 0 auto; padding: 24px 20px 60px; }
-    h1 { text-align: center; font-size: 22px; color: #e0e0e0; margin: 16px 0 4px; }
-    p.sub { text-align: center; color: #888; font-size: 13px; margin: 0 0 24px; }
-    a { color: #7ec4ff; }
-    .nav { text-align: center; margin-bottom: 16px; font-size: 13px; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attack Path Modeler — Build From CVEs</title>
+<link rel="stylesheet" href="assets/app.css">
+<style>
+  /* Builder-specific layout. Shared tokens and components live in app.css.
+     The dashboard is a fixed-height app shell that never scrolls; this page is
+     an ordinary document that does. Releasing the 100% height from html/body is
+     what makes the document the single scroll container — leaving it in place
+     gives the body its own scroller nested inside the page's, and the two
+     disagree about where the top of the content is. */
+  html, body { height: auto; min-height: 100%; }
+  .app { grid-template-rows: auto 1fr; height: auto; min-height: 100vh; overflow: visible; }
 
-    .host-row {
-      background: #22223f;
-      border: 1px solid #3a3a5a;
-      border-radius: 8px;
-      padding: 14px 16px;
-      margin-bottom: 12px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-    .host-row .full { grid-column: 1 / -1; }
-    .host-row label {
-      display: block;
-      font-size: 11px;
-      color: #999;
-      margin-bottom: 3px;
-      letter-spacing: 0.3px;
-    }
-    .host-row input[type=text] {
-      width: 100%;
-      box-sizing: border-box;
-      background: #1a1a2e;
-      border: 1px solid #444466;
-      border-radius: 4px;
-      color: white;
-      padding: 7px 8px;
-      font-size: 13px;
-    }
-    .host-row input[type=text]:focus { outline: none; border-color: #7ec4ff; }
-    .row-footer { display: flex; align-items: center; justify-content: space-between; grid-column: 1 / -1; margin-top: 2px; }
-    .role-toggle { font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 6px; }
-    .remove-btn {
-      background: none; border: 1px solid #663333; color: #ff8888;
-      border-radius: 4px; padding: 4px 10px; font-size: 11px; cursor: pointer;
-    }
-    .remove-btn:hover { background: #331a1a; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 28px 20px 80px; width: 100%; }
 
-    .actions { display: flex; gap: 10px; margin-top: 18px; }
-    button.primary, button.secondary {
-      flex: 1;
-      padding: 11px;
-      border-radius: 6px;
-      border: none;
-      font-size: 14px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    button.primary { background: #d73027; color: white; }
-    button.primary:hover { background: #c02a20; }
-    button.primary:disabled { background: #555; cursor: not-allowed; }
-    button.secondary { background: #2a2a4a; color: #ddd; border: 1px solid #444466; }
-    button.secondary:hover { background: #333358; }
+  .lede { margin: 0 0 22px; }
+  .lede h2 { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 6px; }
+  .lede p { margin: 0; color: var(--text-dim); font-size: 13.5px; line-height: 1.6; }
 
-    #status {
-      margin-top: 18px;
-      padding: 12px 14px;
-      border-radius: 6px;
-      font-size: 13px;
-      line-height: 1.6;
-      display: none;
-    }
-    #status.info    { display: block; background: #1e2a3a; border: 1px solid #33557a; color: #bcd9f5; }
-    #status.error   { display: block; background: #3a1e1e; border: 1px solid #7a3333; color: #f5bcbc; }
-    #status.success { display: block; background: #1e3a24; border: 1px solid #337a44; color: #bcf5c8; }
-    #status a.view-link { color: #9fe6b0; font-weight: bold; }
-  </style>
+  .host { position: relative; padding-top: 16px; }
+  .host .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+  .host .grid .full { grid-column: 1 / -1; }
+
+  .host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 11px;
+  }
+  .host-head .n {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.09em;
+    color: var(--text-faint); text-transform: uppercase;
+  }
+  .remove {
+    background: none; border: 1px solid var(--line); color: var(--text-faint);
+    padding: 3px 9px; font-size: 11.5px;
+  }
+  .remove:hover { border-color: var(--risk-dim); color: #ffb0b0; background: #2a1a20; }
+
+  .row-footer {
+    grid-column: 1 / -1; display: flex; align-items: center;
+    justify-content: space-between; gap: 10px; margin-top: 2px;
+  }
+  .check { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-dim); }
+  .check input { accent-color: var(--info); width: 14px; height: 14px; }
+
+  .actions { display: flex; gap: 10px; margin-top: 18px; }
+  .actions .btn { padding: 10px 14px; }
+  .actions .grow { flex: 1; }
+
+  #status { margin-top: 20px; display: none; }
+  #status.show { display: block; }
+
+  .result-chain { font-family: var(--mono); font-size: 12.5px; line-height: 1.8; word-break: break-word; }
+
+  .hint { margin-top: 22px; color: var(--text-faint); font-size: 12.5px; line-height: 1.7; }
+  .hint code { color: var(--text-dim); }
+
+  @media (max-width: 560px) {
+    .host .grid { grid-template-columns: 1fr; }
+  }
+</style>
 </head>
 <body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <h1>Attack Path Modeler</h1>
+      <span class="tag">build from known CVEs</span>
+    </div>
+    <div class="spacer"></div>
+    <nav><a href="dashboard.html">&larr; Back to dashboard</a></nav>
+  </header>
+
   <div class="wrap">
-    <h1>Build Attack Graph From Known CVEs</h1>
-    <p class="sub">No Nessus scan needed — type in hosts and real CVE IDs, CVSS scores are pulled live from NVD.</p>
-    <div class="nav"><a href="dashboard.html">&larr; Back to dashboard</a></div>
+
+    <div class="lede">
+      <h2>Build an attack graph from CVEs you already know about</h2>
+      <p>
+        No Nessus scan needed. Name the hosts, list the CVEs on each, and the pipeline
+        pulls CVSS from NVD, exploit probability from EPSS and CISA KEV, applies the
+        segmentation policy, and ranks the chains — same code path as a real scan.
+      </p>
+    </div>
 
     <div id="hosts"></div>
 
     <div class="actions">
-      <button type="button" class="secondary" id="add-host">+ Add Host</button>
-      <button type="button" class="primary" id="generate">Generate Attack Graph</button>
+      <button type="button" class="btn" id="add-host">+ Add host</button>
+      <button type="button" class="btn" id="load-example">Load example</button>
+      <button type="button" class="btn-primary grow" id="generate">Build attack graph</button>
     </div>
 
     <div id="status"></div>
+
+    <p class="hint">
+      Only real CVE IDs resolve — CVSS is fetched live from the NVD API, and uncached
+      lookups are rate-limited to roughly one every six seconds. Mark a host as a gateway
+      if it bridges network segments. Prefer the terminal? <code>python main_from_cves.py --interactive</code>.
+    </p>
+
   </div>
+</div>
 
 <script>
 const hostsEl = document.getElementById("hosts");
 const statusEl = document.getElementById("status");
-let rowCount = 0;
+const generateBtn = document.getElementById("generate");
 
-// Escape untrusted strings before they ever go into innerHTML — hostnames typed into
-// this form get echoed back in the /api/generate response and rendered into the status
-// panel, so without this a hostname like "<img src=x onerror=...>" would execute.
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
+// Hostnames typed into this form are echoed back in the /api/generate response and
+// rendered into the status panel, so without escaping, a hostname like
+// "<img src=x onerror=...>" would execute.
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const EXAMPLE = [
+  { hostname: "web-server", ip: "10.0.0.10", cves: "CVE-2021-44228, CVE-2023-38408", port: "443", service: "https", gateway: true },
+  { hostname: "file-server", ip: "10.0.1.20", cves: "CVE-2021-34527", port: "445", service: "smb" },
+];
+
+function renumber() {
+  [...hostsEl.children].forEach((row, i) => {
+    row.querySelector(".n").textContent = "Host " + (i + 1);
+  });
 }
 
 function addRow(prefill) {
   prefill = prefill || {};
-  const id = rowCount++;
   const row = document.createElement("div");
-  row.className = "host-row";
-  row.dataset.id = id;
-  row.innerHTML = `
-    <div>
-      <label>Hostname</label>
-      <input type="text" class="f-hostname" placeholder="web-server" value="${escapeHtml(prefill.hostname || "")}">
-    </div>
-    <div>
-      <label>IP address</label>
-      <input type="text" class="f-ip" placeholder="10.0.0.10" value="${escapeHtml(prefill.ip || "")}">
-    </div>
-    <div class="full">
-      <label>CVE IDs (comma-separated)</label>
-      <input type="text" class="f-cves" placeholder="CVE-2021-44228, CVE-2021-45046" value="${escapeHtml(prefill.cves || "")}">
-    </div>
-    <div>
-      <label>Port (optional)</label>
-      <input type="text" class="f-port" placeholder="443" value="${escapeHtml(prefill.port || "")}">
-    </div>
-    <div>
-      <label>Service (optional)</label>
-      <input type="text" class="f-service" placeholder="https" value="${escapeHtml(prefill.service || "")}">
-    </div>
-    <div class="row-footer">
-      <label class="role-toggle">
-        <input type="checkbox" class="f-gateway" ${prefill.gateway ? "checked" : ""}>
-        Gateway (bridges network segments)
-      </label>
-      <button type="button" class="remove-btn">Remove</button>
-    </div>
-  `;
-  row.querySelector(".remove-btn").addEventListener("click", () => row.remove());
+  row.className = "card host";
+  row.innerHTML =
+    '<div class="host-head"><span class="n"></span>' +
+    '<button type="button" class="remove">Remove</button></div>' +
+    '<div class="grid">' +
+      '<label class="field"><span>Hostname</span>' +
+        '<input type="text" class="f-hostname" placeholder="web-server" value="' + esc(prefill.hostname || "") + '"></label>' +
+      '<label class="field"><span>IP address</span>' +
+        '<input type="text" class="f-ip mono" placeholder="10.0.0.10" value="' + esc(prefill.ip || "") + '"></label>' +
+      '<label class="field full"><span>CVE IDs — comma separated</span>' +
+        '<input type="text" class="f-cves mono" placeholder="CVE-2021-44228, CVE-2021-45046" value="' + esc(prefill.cves || "") + '"></label>' +
+      '<label class="field"><span>Port — optional</span>' +
+        '<input type="text" class="f-port mono" placeholder="443" value="' + esc(prefill.port || "") + '"></label>' +
+      '<label class="field"><span>Service — optional</span>' +
+        '<input type="text" class="f-service" placeholder="https" value="' + esc(prefill.service || "") + '"></label>' +
+      '<div class="row-footer">' +
+        '<label class="check"><input type="checkbox" class="f-gateway"' + (prefill.gateway ? " checked" : "") + ">" +
+          "Gateway — bridges network segments</label>" +
+      "</div>" +
+    "</div>";
+
+  row.querySelector(".remove").addEventListener("click", () => {
+    row.remove();
+    if (!hostsEl.children.length) addRow();
+    renumber();
+  });
   hostsEl.appendChild(row);
+  renumber();
+  return row;
 }
 
-document.getElementById("add-host").addEventListener("click", () => addRow());
+document.getElementById("add-host").addEventListener("click", () => {
+  addRow().querySelector(".f-hostname").focus();
+});
 
-// Start with two blank rows so the form isn't empty
+document.getElementById("load-example").addEventListener("click", () => {
+  hostsEl.innerHTML = "";
+  EXAMPLE.forEach(addRow);
+  setStatus("info", "Two hosts loaded with real, KEV-listed CVEs. Press <b>Build attack graph</b>.");
+});
+
 addRow();
 addRow();
 
 function setStatus(kind, html) {
-  statusEl.className = kind;
-  statusEl.innerHTML = html;
+  statusEl.className = "show";
+  statusEl.innerHTML = '<div class="notice ' + kind + '">' + html + "</div>";
 }
 
-document.getElementById("generate").addEventListener("click", async () => {
-  const rows = [...hostsEl.querySelectorAll(".host-row")];
+function collectHosts() {
   const hosts = {};
-  let error = null;
-
-  for (const row of rows) {
+  for (const row of hostsEl.children) {
     const hostname = row.querySelector(".f-hostname").value.trim();
     const ip = row.querySelector(".f-ip").value.trim();
     const cvesRaw = row.querySelector(".f-cves").value.trim();
-    if (!hostname && !ip && !cvesRaw) continue; // skip fully blank rows
+    if (!hostname && !ip && !cvesRaw) continue;              // skip fully blank rows
 
-    if (!hostname || !ip) {
-      error = "Every host needs a hostname and an IP address.";
-      break;
-    }
+    if (!hostname || !ip) throw new Error("Every host needs a hostname and an IP address.");
     const cves = cvesRaw.split(",").map(s => s.trim()).filter(Boolean);
-    if (cves.length === 0) {
-      error = `${hostname}: at least one CVE ID is required.`;
-      break;
-    }
+    if (!cves.length) throw new Error(hostname + ": at least one CVE ID is required.");
 
     hosts[hostname] = {
       ip,
@@ -185,23 +197,27 @@ document.getElementById("generate").addEventListener("click", async () => {
       port: row.querySelector(".f-port").value.trim(),
       service: row.querySelector(".f-service").value.trim(),
     };
-    if (row.querySelector(".f-gateway").checked) {
-      hosts[hostname].role = "gateway";
-    }
+    if (row.querySelector(".f-gateway").checked) hosts[hostname].role = "gateway";
   }
+  if (!Object.keys(hosts).length) throw new Error("Add at least one host first.");
+  return hosts;
+}
 
-  if (error) {
-    setStatus("error", error);
+generateBtn.addEventListener("click", async () => {
+  let hosts;
+  try {
+    hosts = collectHosts();
+  } catch (e) {
+    setStatus("error", esc(e.message));
     return;
   }
-  if (Object.keys(hosts).length === 0) {
-    setStatus("error", "Add at least one host first.");
-    return;
-  }
 
-  const btn = document.getElementById("generate");
-  btn.disabled = true;
-  setStatus("info", "Looking up CVEs from NVD&hellip; new (uncached) CVEs are rate-limited to ~1 every 6 seconds, so this can take a bit for several hosts.");
+  generateBtn.disabled = true;
+  generateBtn.textContent = "Building…";
+  setStatus("info",
+    "Looking up " + Object.keys(hosts).length + " host" + (Object.keys(hosts).length === 1 ? "" : "s") +
+    " against NVD, EPSS and CISA KEV… uncached CVEs are rate-limited to about one every six " +
+    "seconds, so several hosts can take a minute.");
 
   try {
     const res = await fetch("/api/generate", {
@@ -212,25 +228,43 @@ document.getElementById("generate").addEventListener("click", async () => {
     const data = await res.json();
 
     if (!res.ok || !data.ok) {
-      setStatus("error", `Failed: ${escapeHtml(data.error || res.statusText)}`);
+      setStatus("error", "<b>Could not build the graph.</b><br>" + esc(data.error || res.statusText));
       return;
     }
 
-    const choke = data.chokePoints.filter(c => c.share > 0)
-      .map(c => `${escapeHtml(c.hostname)} (${(c.share * 100).toFixed(0)}% of chains)`)
-      .join(", ") || "none — no host sits on a shared route";
-    const risk = data.riskPath.length ? data.riskPath.map(escapeHtml).join(" &rarr; ") : "none found";
+    const chokes = (data.chokePoints || []).filter(c => c.share > 0);
+    const chokeHtml = chokes.length
+      ? chokes.map(c =>
+          '<div class="bar-row" style="cursor:default">' +
+            '<div class="name">' + esc(c.hostname) + "</div>" +
+            '<div class="value">' + (c.share * 100).toFixed(0) + "%</div>" +
+            '<div class="track"><div class="fill" style="width:' + (c.share * 100).toFixed(1) + '%"></div></div>' +
+          "</div>").join("")
+      : '<div class="empty">No host sits on a shared route.</div>';
+
+    const chain = (data.riskPath || []).length
+      ? data.riskPath.map(esc).join(" &rarr; ")
+      : '<span class="empty">No chain reaches a crown jewel under this policy.</span>';
+    const p = data.riskPathProbability;
+
     setStatus("success",
-      `Graph built: ${data.nodeCount} host${data.nodeCount === 1 ? "" : "s"}, ` +
-      `${data.edgeCount} edge${data.edgeCount === 1 ? "" : "s"}.<br>` +
-      `Choke points: ${choke}<br>` +
-      `Highest risk path: ${risk}<br><br>` +
-      `<a class="view-link" href="dashboard.html">View it on the dashboard &rarr;</a>`
-    );
+      "<b>Graph built.</b> " + data.nodeCount + " host" + (data.nodeCount === 1 ? "" : "s") +
+        ", " + data.edgeCount + " edge" + (data.edgeCount === 1 ? "" : "s") + "." +
+      '<div style="margin:12px 0 4px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-faint)">Most probable chain</div>' +
+      '<div class="result-chain">' + chain +
+        (p != null ? '<br><span style="color:var(--text-faint)">P(success) = ' + p.toFixed(4) + "</span>" : "") +
+      "</div>" +
+      '<div style="margin:14px 0 4px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-faint)">Choke points</div>' +
+      chokeHtml +
+      '<div style="margin-top:14px"><a href="dashboard.html"><b>Open it on the dashboard &rarr;</b></a></div>');
+
   } catch (e) {
-    setStatus("error", `Request failed: ${e.message}. Is the server still running?`);
+    setStatus("error",
+      "<b>Request failed.</b> " + esc(e.message) +
+      "<br>This page needs the local server — start it with <code>python main.py --serve</code>.");
   } finally {
-    btn.disabled = false;
+    generateBtn.disabled = false;
+    generateBtn.textContent = "Build attack graph";
   }
 });
 </script>

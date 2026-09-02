@@ -158,6 +158,27 @@ contain. `--graph-plot` still renders the node-link diagram if you want a static
 topology picture without starting a server, but it is not the default, because
 duplicating the dashboard in a window you cannot interact with is not a second view.
 
+### The dashboard draws the segmentation policy
+
+Hosts are laid out in **lanes, one per zone, ordered by attacker depth** — a breadth-first
+walk from the internet-facing hosts, so one lane to the right is one segmentation boundary
+crossed. Node x is clamped to its lane rather than nudged toward it: a node drifting into
+the neighbouring lane would make the whole layout lie about the policy.
+
+That turns the left-to-right axis into the thing the JSON policy file asserts but never
+shows. The rest follows from it — the red chain visibly crosses two boundaries to reach
+the crown jewel, and the hosts every route funnels through are the ones the choke-point
+panel names.
+
+Colour and size are `P(exploit)`, never CVSS, so the dashboard cannot quietly contradict
+the claim the project rests on. A red ring means the host carries a CVE on the CISA KEV
+list; an amber halo means it is a crown jewel. Selecting a host dims everything outside
+its neighbourhood and opens a panel with its CVEs, its ways in, and its ways onward.
+
+Both browser views share one stylesheet (`assets/app.css`), and `src/report.py` draws with
+the same tokens, so the report and the two pages are one tool rather than three dark themes
+that happen to share a hue.
+
 ```bash
 python main_from_cves.py                  # uses data/known_hosts.json
 python main_from_cves.py path/to/spec.json
@@ -208,11 +229,11 @@ attack-path-modeler/
 │   ├── sample.nessus
 │   ├── segmentation.json
 │   └── known_hosts*.json
-├── src/report.py             # the static risk report (see below)
+├── assets/app.css            # design tokens shared by both pages and report.py
 ├── main.py
 ├── main_from_cves.py
-├── dashboard.html
-└── builder.html
+├── dashboard.html            # zone-lane attack graph, chain, choke points
+└── builder.html              # build a graph from typed CVE IDs
 ```
 
 ---
