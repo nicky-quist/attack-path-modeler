@@ -22,6 +22,30 @@ MAX_BODY_BYTES = 100_000  # generous for a host/CVE list; blocks trivial memory-
 MAX_HOSTS = 50            # keeps k-shortest-path enumeration bounded on user-supplied specs
 
 
+class DashboardServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    """One connection per thread.
+
+    A plain TCPServer handles exactly one connection at a time, and browsers
+    routinely open a speculative second socket and leave it idle. The server
+    then blocks in the read on that socket, and every later request — the next
+    page, the stylesheet, a POST to /api/generate — hangs until the browser
+    happens to close it. The dashboard would load once and then appear to
+    freeze, which reads as a broken tool rather than a busy one.
+
+    daemon_threads so a browser holding a connection open cannot keep the
+    process alive after Ctrl+C.
+    """
+
+    daemon_threads = True
+
+    # HTTPServer turns this on; TCPServer, which this replaced, does not. Left
+    # on, Windows lets SO_REUSEADDR bind a port another process already holds,
+    # so the "port in use, try the next one" fallback below would stop firing
+    # and two servers would fight over one port. Threading is the only thing
+    # meant to change here.
+    allow_reuse_address = False
+
+
 class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         # Browsers request /favicon.ico unprompted. There isn't one, and the
@@ -114,7 +138,7 @@ def serve_dashboard(port=8080, open_browser=True, max_attempts=5, page="dashboar
         try:
             # Bind to loopback only — "" binds all interfaces, which would expose this
             # (unauthenticated, file-writing) server to anyone else on the same network.
-            httpd = socketserver.TCPServer(("127.0.0.1", candidate), DashboardRequestHandler)
+            httpd = DashboardServer(("127.0.0.1", candidate), DashboardRequestHandler)
             port = candidate
             break
         except OSError:
