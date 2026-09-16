@@ -6,6 +6,8 @@ Exploitability comes from **EPSS** and **CISA KEV** rather than CVSS alone, edge
 
 **[→ Open the live dashboard](https://nicky-quist.github.io/attack-path-modeler/)**
 
+![Live dashboard: zone lanes, the most probable chain from the internet to the domain controller, and choke points](attack_path_dashboard.png)
+
 The hosted copy runs the real analysis output for the sample estate: zone lanes, the
 ranked chain, the choke points, every host's CVEs. It is the committed
 [`data/graph.json`](data/graph.json), produced by the pipeline in this repo.

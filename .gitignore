@@ -12,3 +12,7 @@ data/.kev_cache.json
 # (attack_path_report.png) stays tracked because the README embeds it; this
 # one is a scratch rendering nothing links to.
 attack_path_graph.png
+
+# Scratch output from `python experiments/study.py --quick` and run logs
+experiments/results/quick/
+*.log
