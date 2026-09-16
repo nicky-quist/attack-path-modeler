@@ -106,34 +106,23 @@
   </div>
 </div>
 
+<script src="assets/pipeline.js"></script>
 <script>
 const hostsEl = document.getElementById("hosts");
 const statusEl = document.getElementById("status");
 const generateBtn = document.getElementById("generate");
 
-// Hostnames typed into this form are echoed back in the /api/generate response and
+// Hostnames typed into this form are echoed back in the build result and
 // rendered into the status panel, so without escaping, a hostname like
 // "<img src=x onerror=...>" would execute.
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-// Building a graph runs the NVD, EPSS and KEV lookups and the whole Python
-// pipeline behind POST /api/generate. GitHub Pages is static hosting, so on the
-// published copy that endpoint does not exist. Detect it up front and say so,
-// rather than letting the click fail into a network error that reads like a bug
-// in the tool. The dashboard needs no backend and stays fully live either way.
+// Served by `python main.py --serve`, the build goes to POST /api/generate and
+// Python writes data/graph.json. GitHub Pages is static hosting with no such
+// endpoint, so there the same pipeline runs in this tab (assets/pipeline.js)
+// and the result is kept in localStorage for dashboard.html?data=browser.
 const HAS_BACKEND = location.hostname === "localhost" || location.hostname === "127.0.0.1";
-
-const NO_BACKEND_HTML =
-  "<b>This is the hosted copy, so the build step is not wired up here.</b><br>" +
-  "Resolving CVSS from NVD, exploit probability from EPSS and CISA KEV, and then " +
-  "ranking the chains all happen in Python — GitHub Pages only serves static files. " +
-  "The form below still works, and the <a href='dashboard.html'>dashboard</a> is fully live " +
-  "on the sample estate.<br><br>To build your own graph:<br>" +
-  "<code>git clone https://github.com/nicky-quist/attack-path-modeler</code><br>" +
-  "<code>pip install -r requirements.txt</code><br>" +
-  "<code>python main.py --serve</code><br><br>" +
-  "then open <code>localhost:8080/builder.html</code>.";
 
 const EXAMPLE = [
   { hostname: "web-server", ip: "10.0.0.10", cves: "CVE-2021-44228, CVE-2023-38408", port: "443", service: "https", gateway: true },
@@ -187,16 +176,11 @@ document.getElementById("add-host").addEventListener("click", () => {
 document.getElementById("load-example").addEventListener("click", () => {
   hostsEl.innerHTML = "";
   EXAMPLE.forEach(addRow);
-  setStatus("info", "Two hosts loaded with real, KEV-listed CVEs. Press <b>Build attack graph</b>.");
+  setStatus("info", "Two hosts loaded with real CVEs. Press <b>Build attack graph</b>.");
 });
 
 addRow();
 addRow();
-
-if (!HAS_BACKEND) {
-  setStatus("info", NO_BACKEND_HTML);
-  generateBtn.textContent = "Build attack graph (needs the local server)";
-}
 
 function setStatus(kind, html) {
   statusEl.className = "show";
@@ -227,72 +211,91 @@ function collectHosts() {
   return hosts;
 }
 
+function showResult(data, dashboardHref) {
+  const chokes = (data.chokePoints || []).filter(c => c.share > 0);
+  const chokeHtml = chokes.length
+    ? chokes.map(c =>
+        '<div class="bar-row" style="cursor:default">' +
+          '<div class="name">' + esc(c.hostname) + "</div>" +
+          '<div class="value">' + (c.share * 100).toFixed(0) + "%</div>" +
+          '<div class="track"><div class="fill" style="width:' + (c.share * 100).toFixed(1) + '%"></div></div>' +
+        "</div>").join("")
+    : '<div class="empty">No host sits on a shared route.</div>';
+
+  const chain = (data.riskPath || []).length
+    ? data.riskPath.map(esc).join(" &rarr; ")
+    : '<span class="empty">No chain reaches a crown jewel under this policy.</span>';
+  const p = data.riskPathProbability;
+  const warnings = (data.warnings || []).length
+    ? '<div style="margin-top:12px;color:var(--text-dim)">' + data.warnings.map(esc).join("<br>") + "</div>"
+    : "";
+
+  setStatus("success",
+    "<b>Graph built.</b> " + data.nodeCount + " node" + (data.nodeCount === 1 ? "" : "s") +
+      ", " + data.edgeCount + " edge" + (data.edgeCount === 1 ? "" : "s") + "." +
+    '<div style="margin:12px 0 4px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-faint)">Most probable chain</div>' +
+    '<div class="result-chain">' + chain +
+      (p != null ? '<br><span style="color:var(--text-faint)">P(success) = ' + p.toFixed(4) + "</span>" : "") +
+    "</div>" +
+    '<div style="margin:14px 0 4px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-faint)">Choke points</div>' +
+    chokeHtml + warnings +
+    '<div style="margin-top:14px"><a href="' + dashboardHref + '"><b>Open it on the dashboard &rarr;</b></a></div>');
+}
+
+async function buildOnServer(hosts) {
+  const res = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hosts }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || "The server did not accept the build. Start it with python main.py --serve.");
+  }
+  return data;
+}
+
+async function buildInBrowser(hosts) {
+  // The bundled policy applies when it covers these hosts, exactly as on the
+  // server; otherwise the pipeline synthesises one zone per /24.
+  const policySpec = await fetch("data/segmentation.json")
+    .then(r => (r.ok ? r.json() : null)).catch(() => null);
+  const data = await AttackPath.generate(hosts, {
+    policySpec,
+    sourceLabel: "known CVEs — built in your browser",
+    onProgress: msg => setStatus("info", esc(msg)),
+  });
+  try {
+    localStorage.setItem("apm:graph", JSON.stringify(data.graph));
+  } catch {
+    data.warnings.push("This browser blocks local storage, so the dashboard cannot open this graph.");
+  }
+  return data;
+}
+
 generateBtn.addEventListener("click", async () => {
   let hosts;
   try {
     hosts = collectHosts();
+    AttackPath.validateSpec(hosts);
   } catch (e) {
     setStatus("error", esc(e.message));
     return;
   }
 
-  // Validate first, so the hosted copy still tells you whether your input is
-  // well formed before explaining that it cannot go any further here.
-  if (!HAS_BACKEND) {
-    setStatus("info", NO_BACKEND_HTML);
-    return;
-  }
-
+  const count = Object.keys(hosts).length;
   generateBtn.disabled = true;
   generateBtn.textContent = "Building…";
   setStatus("info",
-    "Looking up " + Object.keys(hosts).length + " host" + (Object.keys(hosts).length === 1 ? "" : "s") +
+    "Looking up " + count + " host" + (count === 1 ? "" : "s") +
     " against NVD, EPSS and CISA KEV… uncached CVEs are rate-limited to about one every six " +
     "seconds, so several hosts can take a minute.");
 
   try {
-    const res = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hosts }),
-    });
-    const data = await res.json();
-
-    if (!res.ok || !data.ok) {
-      setStatus("error", "<b>Could not build the graph.</b><br>" + esc(data.error || res.statusText));
-      return;
-    }
-
-    const chokes = (data.chokePoints || []).filter(c => c.share > 0);
-    const chokeHtml = chokes.length
-      ? chokes.map(c =>
-          '<div class="bar-row" style="cursor:default">' +
-            '<div class="name">' + esc(c.hostname) + "</div>" +
-            '<div class="value">' + (c.share * 100).toFixed(0) + "%</div>" +
-            '<div class="track"><div class="fill" style="width:' + (c.share * 100).toFixed(1) + '%"></div></div>' +
-          "</div>").join("")
-      : '<div class="empty">No host sits on a shared route.</div>';
-
-    const chain = (data.riskPath || []).length
-      ? data.riskPath.map(esc).join(" &rarr; ")
-      : '<span class="empty">No chain reaches a crown jewel under this policy.</span>';
-    const p = data.riskPathProbability;
-
-    setStatus("success",
-      "<b>Graph built.</b> " + data.nodeCount + " host" + (data.nodeCount === 1 ? "" : "s") +
-        ", " + data.edgeCount + " edge" + (data.edgeCount === 1 ? "" : "s") + "." +
-      '<div style="margin:12px 0 4px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-faint)">Most probable chain</div>' +
-      '<div class="result-chain">' + chain +
-        (p != null ? '<br><span style="color:var(--text-faint)">P(success) = ' + p.toFixed(4) + "</span>" : "") +
-      "</div>" +
-      '<div style="margin:14px 0 4px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-faint)">Choke points</div>' +
-      chokeHtml +
-      '<div style="margin-top:14px"><a href="dashboard.html"><b>Open it on the dashboard &rarr;</b></a></div>');
-
+    if (HAS_BACKEND) showResult(await buildOnServer(hosts), "dashboard.html");
+    else showResult(await buildInBrowser(hosts), "dashboard.html?data=browser");
   } catch (e) {
-    setStatus("error",
-      "<b>Request failed.</b> " + esc(e.message) +
-      "<br>This page needs the local server — start it with <code>python main.py --serve</code>.");
+    setStatus("error", "<b>Could not build the graph.</b><br>" + esc(e.message));
   } finally {
     generateBtn.disabled = false;
     generateBtn.textContent = "Build attack graph";

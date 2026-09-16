@@ -225,14 +225,26 @@ d3.select("#ramp").style("background",
 
 // -------------------------------------------------------------------- render
 
-d3.json("data/graph.json")
-  .then(data => (data && data.nodes && data.nodes.length) ? render(data) : fallback(
-    "<b>data/graph.json has no hosts in it.</b><br>Run <code>python main.py</code> to rebuild it, " +
-    "or add hosts on the <a href='builder.html'>builder page</a>."))
-  .catch(() => fallback(
-    "<b>Could not load data/graph.json.</b><br>This page has to be served over HTTP — browsers " +
-    "block a local file from reading another local file. Start it with:<br><br>" +
-    "<code>python main.py --serve</code>"));
+// On GitHub Pages the builder runs the pipeline in the browser and leaves the
+// result in localStorage, since a static site cannot rewrite data/graph.json.
+// dashboard.html?data=browser shows that graph; the plain URL, the sample.
+if (new URLSearchParams(location.search).get("data") === "browser") {
+  let built = null;
+  try { built = JSON.parse(localStorage.getItem("apm:graph")); } catch { /* storage blocked */ }
+  d3.select("nav").insert("a", ":first-child").attr("href", "dashboard.html").text("View the sample estate");
+  if (built && built.nodes && built.nodes.length) render(built);
+  else fallback("<b>No graph has been built in this browser yet.</b><br>" +
+    "Add hosts on the <a href='builder.html'>builder page</a>, or view the <a href='dashboard.html'>sample estate</a>.");
+} else {
+  d3.json("data/graph.json")
+    .then(data => (data && data.nodes && data.nodes.length) ? render(data) : fallback(
+      "<b>data/graph.json has no hosts in it.</b><br>Run <code>python main.py</code> to rebuild it, " +
+      "or add hosts on the <a href='builder.html'>builder page</a>."))
+    .catch(() => fallback(
+      "<b>Could not load data/graph.json.</b><br>This page has to be served over HTTP — browsers " +
+      "block a local file from reading another local file. Start it with:<br><br>" +
+      "<code>python main.py --serve</code>"));
+}
 
 function fallback(html) {
   d3.select("#source-label").text("no data");

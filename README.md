@@ -12,10 +12,13 @@ The hosted copy runs the real analysis output for the sample estate: zone lanes,
 ranked chain, the choke points, every host's CVEs. It is the committed
 [`data/graph.json`](data/graph.json), produced by the pipeline in this repo.
 
-What the hosted copy *cannot* do is build a new graph, because that means calling NVD,
-EPSS and CISA KEV and running the ranking in Python, and GitHub Pages serves static files
-only. [`builder.html`](builder.html) says so plainly when you open it there. Clone and run
-`python main.py --serve` and the same page builds graphs for real.
+[`builder.html`](builder.html) builds a graph from your own hosts and CVE IDs on the hosted
+copy too. GitHub Pages serves static files only, so there the pipeline runs in your browser
+([`assets/pipeline.js`](assets/pipeline.js)): it calls NVD, EPSS and CISA KEV directly and
+ranks the chains with the same algorithms as the Python code, and
+[`tests/test_browser_pipeline.py`](tests/test_browser_pipeline.py) requires it to produce the
+same graph, chain and choke points as Python. Run `python main.py --serve` and the same page
+builds through the Python server instead.
 
 ---
 
@@ -289,17 +292,19 @@ attack-path-modeler/
 │   ├── synthetic.py        # segmented synthetic estate
 │   ├── metrics.py          # precision / recall / F1
 │   ├── export.py           # JSON for the D3 dashboard
-│   └── serve.py            # local server for builder.html
+│   └── serve.py            # local server; POST /api/generate for builder.html
 ├── experiments/
 │   ├── benchmark.py          # reproduces the published 5-network table
 │   ├── study.py              # ablation study: 30 networks, two protocols
 │   └── results/              # STUDY.md tables + study.json raw per-network results
-├── tests/                    # 58 tests, incl. leakage regressions
+├── tests/                    # 63 tests, incl. leakage regressions
 ├── data/
 │   ├── sample.nessus
 │   ├── segmentation.json
 │   └── known_hosts*.json
-├── assets/app.css            # design tokens shared by both pages and report.py
+├── assets/
+│   ├── app.css               # design tokens shared by both pages and report.py
+│   └── pipeline.js           # the build pipeline in the browser, for the hosted builder
 ├── main.py
 ├── main_from_cves.py
 ├── index.html                # GitHub Pages entry point -> dashboard
@@ -307,9 +312,10 @@ attack-path-modeler/
 └── builder.html              # build a graph from typed CVE IDs
 ```
 
-The two pages are plain static files reading `data/graph.json`, which is what lets
-GitHub Pages serve them unchanged from the repo root — no build step, no bundler,
-and the same files the local server serves.
+The two pages are plain static files, which is what lets GitHub Pages serve them
+unchanged from the repo root — no build step, no bundler, and the same files the local
+server serves. The dashboard reads `data/graph.json`, or with `?data=browser` the graph
+the builder last made in this browser.
 
 ---
 
@@ -319,7 +325,7 @@ and the same files the local server serves.
 python -m unittest discover -s tests -t .
 ```
 
-58 tests, run in CI on every push with no network access. The ones worth naming are in [`tests/test_leakage.py`](tests/test_leakage.py), because they encode the two defects that made the original results meaningless:
+63 tests, run in CI on every push with no network access. The ones worth naming are in [`tests/test_leakage.py`](tests/test_leakage.py), because they encode the two defects that made the original results meaningless:
 
 - **`test_threshold_on_target_cvss_does_not_solve_the_task`** — fails if the label ever again becomes recoverable from a single node feature
 - **`test_message_passing_excludes_test_edges`** — fails if held-out edges are ever again propagated through the network before being scored (the original trained message passing over the full edge set, then evaluated on edges inside it)
@@ -328,7 +334,7 @@ python -m unittest discover -s tests -t .
 
 Writing these first would have caught the original bug. They exist now so it cannot come back quietly.
 
-[`tests/test_models.py`](tests/test_models.py) protects the ablation study the same way. It fails if the study's GCN stops reproducing the published model exactly, if the control gains or loses parameters, if the control's output ever depends on graph structure, or if an unseen network's labels could reach training. [`tests/test_stats.py`](tests/test_stats.py) checks the dependency-free statistics against scikit-learn's average precision (200 random cases with heavy ties) and scipy's binomial test.
+[`tests/test_models.py`](tests/test_models.py) protects the ablation study the same way. It fails if the study's GCN stops reproducing the published model exactly, if the control gains or loses parameters, if the control's output ever depends on graph structure, or if an unseen network's labels could reach training. [`tests/test_stats.py`](tests/test_stats.py) checks the dependency-free statistics against scikit-learn's average precision (200 random cases with heavy ties) and scipy's binomial test. [`tests/test_browser_pipeline.py`](tests/test_browser_pipeline.py) runs the hosted builder's JavaScript pipeline and the Python one on the same estates, including ones with tied chains and a share Python rounds down, and fails on any difference in the graph, chain or choke points (it needs Node.js, which CI has).
 
 ---
 
