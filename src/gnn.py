@@ -4,9 +4,12 @@ Edge-level risk classifier.
 What this model is asked to predict — see labels.py — is whether an edge lies
 on an optimal route from wherever it starts to a crown-jewel asset. That is a
 global property of the graph. A node cannot answer it about itself, which is
-the point: it is a task where message passing should earn its place, and it is
-verifiable that it does, because the same features are handed to a linear model
-that has no message passing at all.
+the point: it is a task where message passing *should* earn its place.
+
+Whether it does is measured in experiments/study.py, not here. Beating the
+linear baseline below is not evidence of it: that baseline also lacks this
+model's nonlinear head, and an architecture-matched model with no message
+passing (models.py, conv="none") recovers most of the gap.
 
 Two structural corrections from the original:
 

@@ -15,8 +15,9 @@ The replacement asks something a node cannot answer about itself:
 
 That depends on where the edge sits in the whole graph relative to assets it
 has no local knowledge of. A model must aggregate information over the
-topology to predict it, which is precisely the thing message passing is for —
-and it is why a node-feature-only baseline should now lose.
+topology to predict it, which is precisely the thing message passing is for.
+How much it helps in practice is smaller than that argument suggests, and
+nothing on a network the model hasn't seen: see experiments/study.py.
 """
 import networkx as nx
 

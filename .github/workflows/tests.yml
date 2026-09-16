@@ -28,9 +28,19 @@ jobs:
       - name: Install remaining dependencies
         run: pip install -r requirements.txt
 
-      # The suite is fully offline: EPSS, KEV and NVD lookups are served from
-      # the committed caches in data/, so a third-party outage cannot fail CI.
-      # test_leakage.py holds the regressions for the label-leakage bug, where
-      # the edge label was derived from a feature the model could also see.
+      # Test-only. src/stats.py is deliberately dependency-free, and
+      # tests/test_stats.py checks it against scikit-learn's average precision
+      # and scipy's binomial test. Without these the cross-checks skip, so
+      # install them where it counts.
+      - name: Install reference implementations for metric cross-checks
+        run: pip install scikit-learn scipy
+
+      # The suite makes no network calls. The tests build synthetic estates
+      # with annotate_hosts(offline=True), whose fabricated CVEs fall back to
+      # the CVSS-derived estimate, so no NVD, EPSS or KEV lookup is attempted.
+      # (The data/ caches are gitignored and absent on the runner.) Verified by
+      # running the suite in a clean checkout with sockets blocked.
+      # test_leakage.py holds the regressions for the label-leakage bug;
+      # test_models.py asserts the ablation study's GCN is the published model.
       - name: Run tests
         run: python -m unittest discover -s tests -t . -v

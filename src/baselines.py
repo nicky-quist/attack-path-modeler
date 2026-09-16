@@ -16,9 +16,12 @@ and they are reported next to the GNN every time it trains.
                       evidence the leak is gone.
   logistic-regression a linear model over the same node features the GNN gets,
                       for both endpoints, with no access to graph structure
-                      beyond each endpoint's own degree. This is the real
-                      competitor: it isolates how much of the task needs
-                      message passing rather than local features.
+                      beyond each endpoint's own degree. It was once treated
+                      as the test of whether message passing matters, but it
+                      differs from the GCN in two ways, since it is also
+                      linear. The fair control, identical to the GCN except
+                      for message passing, is conv="none" in models.py; see
+                      experiments/study.py.
 """
 import torch
 
