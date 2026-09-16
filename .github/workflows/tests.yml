@@ -1,0 +1,36 @@
+name: Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Install the CPU-only torch wheel first. A plain `pip install -r
+      # requirements.txt` resolves the CUDA build, which is several GB and
+      # useless on a runner with no GPU. Once torch is present, pip treats the
+      # requirement as satisfied and leaves it alone.
+      - name: Install CPU torch
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install remaining dependencies
+        run: pip install -r requirements.txt
+
+      # The suite is fully offline: EPSS, KEV and NVD lookups are served from
+      # the committed caches in data/, so a third-party outage cannot fail CI.
+      # test_leakage.py holds the regressions for the label-leakage bug, where
+      # the edge label was derived from a feature the model could also see.
+      - name: Run tests
+        run: python -m unittest discover -s tests -t . -v
