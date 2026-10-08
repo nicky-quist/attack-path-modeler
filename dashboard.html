@@ -43,8 +43,8 @@
     letter-spacing: 0.14em; text-transform: uppercase; text-anchor: middle;
   }
 
-  .edge { stroke: #59608c; stroke-opacity: 0.45; stroke-width: 1.1; fill: none; }
-  .edge.kev { stroke: #8a5a6e; stroke-opacity: 0.6; }
+  .edge { stroke: #59608c; stroke-opacity: 0.18; stroke-width: 0.9; fill: none; }
+  .edge.kev { stroke: #6f5a72; stroke-opacity: 0.3; }
   .risk-edge { stroke: var(--risk); stroke-width: 2.6; fill: none; filter: drop-shadow(0 0 4px rgba(255, 93, 93, 0.5)); }
   .risk-edge.flow { stroke-dasharray: 7 6; animation: flow 1.1s linear infinite; }
   @keyframes flow { to { stroke-dashoffset: -13; } }
@@ -199,7 +199,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const idOf = v => (v && typeof v === "object") ? v.id : v;
-const radius = d => 9 + (d.max_p_exploit ?? 0) * 14;
+const radius = d => 6 + (d.max_p_exploit ?? 0) * 10;
 
 // Cool where exploitation is unlikely, hot where it is near-certain. Deliberately
 // not d3's RdYlGn: green reads as "safe, handled" on a dark ground, and a host at
@@ -375,7 +375,10 @@ function render(data) {
       .attr("id", m[0]).attr("viewBox", "0 -5 10 10")
       .attr("refX", 9).attr("refY", 0)
       .attr("markerWidth", 4).attr("markerHeight", 4).attr("orient", "auto")
-      .append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", m[1]);
+      // Base-mesh arrowheads render at full opacity even when their faint lines
+      // recede, so quiet them too; the risk chain keeps a solid head.
+      .append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", m[1])
+      .attr("fill-opacity", m[0] === "arrow-risk" ? 1 : 0.4);
   });
 
   const root = svg.append("g");
