@@ -94,8 +94,8 @@ class EdgeRiskGNN(torch.nn.Module):
         return self.classifier(torch.cat([h[src], h[tgt]], dim=1))
 
 
-def train_gnn(data, epochs=400, lr=0.01, verbose=True):
-    torch.manual_seed(42)
+def train_gnn(data, epochs=400, lr=0.01, seed=42, verbose=True):
+    torch.manual_seed(seed)
     model = EdgeRiskGNN(in_dim=data.x.size(1))
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=5e-4)
 
@@ -124,8 +124,23 @@ def train_gnn(data, epochs=400, lr=0.01, verbose=True):
     return model, binary_metrics(pred[data.test_mask], data.y[data.test_mask])
 
 
-def evaluate_with_baselines(G, policy, data=None, verbose=True):
-    """Train the GNN and report it beside every baseline on the same split."""
+def _mean_metrics(runs):
+    """Average the reported metrics across several training runs of one split."""
+    keys = ("accuracy", "precision", "recall", "f1")
+    return {k: sum(m[k] for m in runs) / len(runs) for k in keys}
+
+
+def evaluate_with_baselines(G, policy, data=None, gnn_seeds=(42,), verbose=True):
+    """Train the GNN and report it beside every baseline on the same split.
+
+    ``gnn_seeds`` trains the GCN once per seed on the *same* split and averages
+    the result. The default of a single seed 42 reproduces the original
+    single-run behaviour exactly; passing several seeds isolates training noise
+    (dropout and initialisation) from differences between networks, so each
+    network's GNN number is a stable estimate rather than one dropout draw.
+    """
+    import statistics
+
     from src.baselines import (cvss_threshold_baseline, logistic_regression_baseline,
                                majority_baseline)
 
@@ -153,7 +168,16 @@ def evaluate_with_baselines(G, policy, data=None, verbose=True):
 
     if verbose:
         print("training GNN...")
-    _, gnn_metrics = train_gnn(data, verbose=verbose)
+    gnn_seeds = list(gnn_seeds)
+    runs = [train_gnn(data, seed=s, verbose=verbose and len(gnn_seeds) == 1)[1]
+            for s in gnn_seeds]
+    if len(runs) == 1:
+        gnn_metrics = runs[0]  # unchanged single-run dict (counts included)
+    else:
+        gnn_metrics = _mean_metrics(runs)
+        f1s = [m["f1"] for m in runs]
+        gnn_metrics["f1_sd"] = statistics.stdev(f1s)
+        gnn_metrics["f1_seeds"] = f1s
     rows.append(("GCN (3-layer, message passing)", gnn_metrics))
 
     if verbose:

@@ -37,20 +37,20 @@ builds through the Python server instead.
 
 ## Results
 
-Five independent synthetic estates, a fresh train/test split each, mean ± sd of test-set F1. Reproduce with `python experiments/benchmark.py`.
+Five independent synthetic estates, a fresh train/test split each, mean ± sd of test-set F1. Each network's GCN number is itself the mean over five training seeds, so the dropout noise below is averaged out before the spread across networks is reported. Reproduce with `python experiments/benchmark.py`.
 
 | Model | F1 | What it tells you |
 |---|---|---|
 | majority class | 0.000 ± 0.000 | the floor — 80% of edges are negative |
 | `max_cvss > 8.5` on the target | 0.560 ± 0.182 | a single threshold on one node feature |
 | logistic regression, no graph | 0.768 ± 0.107 | same features, both endpoints, linear |
-| **GCN (3-layer)** | **0.911 ± 0.151** | **+0.143 over logistic regression** |
+| **GCN (3-layer)** | **0.903 ± 0.145** | **+0.135 over logistic regression** |
 
 Graphs average 71 nodes and 766 edges at 19.6% positive.
 
 This table used to be read as "message passing is worth fourteen F1 points". **That reading was wrong.** Logistic regression differs from the GCN in two ways, not one: it has no message passing, and it is linear, while the GCN ends in a nonlinear classifier head. The ablation study below separates the two. Across 29 networks, most of the gap is the head; message passing adds a small amount within a network and nothing on a network the model hasn't seen.
 
-The spread (± 0.151) is real, but it is not all differences between networks. Training randomness alone moves single results a long way: one network scored 0.647 or 0.815 depending only on the dropout seed.
+The spread (± 0.145) is now between networks, not training noise. Earlier this table reported a single dropout draw per network, and that draw moved a result a long way: on the five estates the per-network standard deviation across training seeds reaches 0.05, and in the wider study below one network scored 0.647 or 0.815 on the same split depending only on the dropout seed. Each cell above is now the mean over five training seeds, and with multithreaded reductions pinned the whole table reproduces exactly from run to run.
 
 
 ## Does message passing earn its place? An ablation study
