@@ -364,8 +364,22 @@ function render(data) {
 
   const LANE_W = Math.max(240, Math.min(360, 1100 / laneOrder.length));
   const PAD = 34;                                    // keeps circles off the lane edge
-  const H = Math.max(520, 92 * Math.ceil(data.nodes.length / Math.max(1, laneOrder.length)) + 180);
   const laneX = z => (laneIndex.get(z) + 0.5) * LANE_W;
+
+  // Give every host a fixed vertical slot in its lane, so each zone reads as a
+  // centred, evenly spaced column instead of a force-scattered cloud — a lane
+  // with one host (the internet) centres it, rather than letting it drift. The
+  // most exploitable hosts sit highest. The forces below pull to these slots.
+  const SLOT = 96;
+  const laneNodes = new Map(laneOrder.map(z => [z, []]));
+  for (const d of data.nodes) (laneNodes.get(zoneOf(d)) || laneNodes.get(laneOrder[0])).push(d);
+  const maxLane = Math.max(1, ...laneOrder.map(z => laneNodes.get(z).length));
+  const H = Math.max(520, SLOT * maxLane + 160);
+  const slotY = new Map();
+  for (const arr of laneNodes.values()) {
+    arr.sort((a, b) => (b.max_p_exploit ?? 0) - (a.max_p_exploit ?? 0) || a.id.localeCompare(b.id));
+    arr.forEach((d, i) => slotY.set(d.id, H / 2 + (i - (arr.length - 1) / 2) * SLOT));
+  }
 
   // ---- scene graph --------------------------------------------------------
 
@@ -473,13 +487,18 @@ function render(data) {
   }
 
   const sim = d3.forceSimulation(data.nodes)
-    .force("link", d3.forceLink(data.links).id(d => d.id).distance(110).strength(0.12))
-    .force("charge", d3.forceManyBody().strength(-560))
+    // Link pull is weak: the slot forces below decide where a node sits, and a
+    // strong link force would drag hosts off their lane column toward whatever
+    // they connect to.
+    .force("link", d3.forceLink(data.links).id(d => d.id).distance(110).strength(0.04))
+    .force("charge", d3.forceManyBody().strength(-160))
     // The collision radius has to clear the label under the circle, not just the
     // circle, or hostnames in a crowded lane overlap each other.
-    .force("collide", d3.forceCollide(d => radius(d) + 32))
-    .force("x", d3.forceX(d => laneX(zoneOf(d))).strength(0.6))
-    .force("y", d3.forceY(H / 2).strength(0.06))
+    .force("collide", d3.forceCollide(d => radius(d) + 26))
+    // Pull hard to the lane centre (x) and to the assigned slot (y), so each
+    // zone is a tidy centred column.
+    .force("x", d3.forceX(d => laneX(zoneOf(d))).strength(0.9))
+    .force("y", d3.forceY(d => slotY.get(d.id)).strength(0.55))
     .on("tick", tick);
 
   function arc(s, t) {
